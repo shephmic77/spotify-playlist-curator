@@ -49,7 +49,7 @@ def test_describe_propose_accept_edit(env, capsys):
     with Database(env / "data" / "curator.sqlite3") as db:
         ids = {p.title: p.proposal_id for p in disc.load_proposals(db)}
     assert cli.main(["proposals", "accept", str(ids["Indie chill"]), "--name", "Chill"]) == 0
-    assert cli.main(["proposals", "reject", str(ids["Regular Show"])]) == 0
+    assert cli.main(["proposals", "reject", "regular show"]) == 0  # by name
     assert cli.main(["proposals", "accept", "99999"]) == 1
     capsys.readouterr()
     assert cli.main(["proposals", "--all"]) == 0
@@ -80,5 +80,13 @@ def test_describe_propose_accept_edit(env, capsys):
     assert out.count("·") == 0 and "late night indie" in out
     out = capsys.readouterr().out
     assert out.count("·") == 3
+    assert (
+        cli.main(
+            ["identities", "new", "Classical", "--like", "Chill", "--concept", "only classical"]
+        )
+        == 0
+    )
+    assert cli.main(["identities", "edit", "Classical", "--require-tag", "classical"]) == 0
+    assert "must have one of: classical" in capsys.readouterr().out
     assert cli.main(["identities", "status", "Chill", "retired"]) == 0
     assert cli.main(["identities", "show", "Nothing"]) == 1

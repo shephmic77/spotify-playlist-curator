@@ -119,6 +119,8 @@ curator intents import data/intents.json   # or: curator intents set "W" "gym" -
 curator propose             # proposals for the new collection
 curator proposals accept 3 7 12   ·   curator proposals reject 5
 curator identities          # your new playlists; `identities edit NAME --add-tag ...`
+curator identities new "Classical" --like "Calm"   # create/copy a playlist without a proposal
+curator identities edit "Classical" --require-tag classical   # only songs with that tag
 curator ui                  # Streamlit interface at http://localhost:8501
 ```
 
@@ -159,7 +161,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 155 tests; Spotify, MusicBrainz and Last.fm are mocked
+pytest            # 156 tests; Spotify, MusicBrainz and Last.fm are mocked
 ruff check . && ruff format --check .
 ```
 

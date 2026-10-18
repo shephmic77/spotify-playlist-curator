@@ -176,6 +176,10 @@ with tab_new:
                     avoid = st.text_input(
                         "Avoid tags", ", ".join(ident.rules.get("avoid_tags") or [])
                     )
+                    require = st.text_input(
+                        "Must have one of these tags",
+                        ", ".join(ident.rules.get("require_tags") or []),
+                    )
                     yrs = ident.rules.get("years")
                     years = st.text_input(
                         "Preferred years (FROM-TO or none)", f"{yrs[0]}-{yrs[1]}" if yrs else "none"
@@ -199,6 +203,8 @@ with tab_new:
                             remove_tags=list(current - set(new_tags)),
                             avoid_tags=[x.strip() for x in avoid.split(",") if x.strip()],
                             unavoid_tags=list(ident.rules.get("avoid_tags") or []),
+                            require_tags=[x.strip() for x in require.split(",") if x.strip()],
+                            unrequire_tags=list(ident.rules.get("require_tags") or []),
                             years=idn.parse_years(years),
                             auto_maintain=auto,
                         )

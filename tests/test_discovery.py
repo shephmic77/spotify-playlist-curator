@@ -187,3 +187,33 @@ def test_ambiguous_playlist_names_are_not_guessed(db, lib):
         it.resolve_playlist(db, "H")
     assert "pl_h1" in str(exc.value) and "pl_h2" in str(exc.value)
     assert it.resolve_playlist(db, "pl_h2")["spotify_id"] == "pl_h2"
+
+
+def test_create_copy_and_required_tags(db, lib):
+    props, _ = disc.propose(db, descriptors=lib)
+    disc.save_proposals(db, props)
+    p = by_title(disc.load_proposals(db))["Indie chill"]
+    calm = idn.get_identity(db, disc.accept(db, p.proposal_id, name="Calm"))
+    classical = idn.create_identity(db, "Classical", like="Calm", concept="only classical")
+    assert classical.rules["tags"] == calm.rules["tags"]
+    assert classical.examples == calm.examples
+    assert classical.origin == {"created": "copy", "copied_from": calm.identity_id}
+    classical = idn.edit_identity(
+        db,
+        "Classical",
+        remove_tags=list(classical.rules["tags"]),
+        add_tags={"classical": 1.0},
+        require_tags=["classical"],
+    )
+    assert classical.rules["tags"] == {"classical": 1.0}
+    assert classical.rules["require_tags"] == ["classical"]
+    # replacing a list with itself keeps it (removals apply before additions)
+    same = idn.edit_identity(
+        db, "Classical", require_tags=["classical"], unrequire_tags=["classical"], avoid_tags=["x"]
+    )
+    same = idn.edit_identity(db, "Classical", avoid_tags=["x"], unavoid_tags=["x"])
+    assert same.rules["require_tags"] == ["classical"] and same.rules["avoid_tags"] == ["x"]
+    blank = idn.create_identity(db, "Hand list", kind="handpicked", auto_maintain=False)
+    assert blank.rules["tags"] == {} and not blank.auto_maintain and blank.examples == {}
+    with pytest.raises(LookupError):
+        idn.create_identity(db, "X", like="does not exist")

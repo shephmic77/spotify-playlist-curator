@@ -90,24 +90,31 @@ def edit_identity(
     remove_tags: list[str] | None = None,
     avoid_tags: list[str] | None = None,
     unavoid_tags: list[str] | None = None,
+    require_tags: list[str] | None = None,
+    unrequire_tags: list[str] | None = None,
     years: list[int] | str | None = "keep",
     auto_maintain: bool | None = None,
 ) -> Identity:
     ident = get_identity(db, ref)
     rules = dict(ident.rules)
+
+    # Removals first, then additions, so "replace the list" edits (as the UI does) work.
+    def norm(xs: list[str] | None) -> list[str]:
+        return [x.strip().lower() for x in xs or [] if x.strip()]
+
     tags = dict(rules.get("tags") or {})
+    for t in norm(remove_tags):
+        tags.pop(t, None)
     for t, w in (add_tags or {}).items():
         if not 0 < w <= 1:
             raise ValueError(f"tag weight for {t!r} must be in (0, 1]")
         tags[t.strip().lower()] = w
-    for t in remove_tags or []:
-        tags.pop(t.strip().lower(), None)
-    avoid = list(rules.get("avoid_tags") or [])
-    for t in avoid_tags or []:
-        if t.strip().lower() not in avoid:
-            avoid.append(t.strip().lower())
-    avoid = [t for t in avoid if t not in {u.strip().lower() for u in unavoid_tags or []}]
-    rules["tags"], rules["avoid_tags"] = tags, avoid
+    avoid = [t for t in rules.get("avoid_tags") or [] if t not in set(norm(unavoid_tags))]
+    avoid += [t for t in norm(avoid_tags) if t not in avoid]
+    # A song must carry at least one required tag to qualify (e.g. "Classical" = classical only)
+    required = [t for t in rules.get("require_tags") or [] if t not in set(norm(unrequire_tags))]
+    required += [t for t in norm(require_tags) if t not in required]
+    rules["tags"], rules["avoid_tags"], rules["require_tags"] = tags, avoid, required
     if years != "keep":
         if years is not None and (len(years) != 2 or years[0] > years[1]):
             raise ValueError("years must be FROM-TO, e.g. 1980-1989")
@@ -128,6 +135,56 @@ def edit_identity(
         ),
     )
     return get_identity(db, ident.identity_id)
+
+
+def create_identity(
+    db: Database,
+    name: str,
+    *,
+    kind: str = "sound",
+    concept: str = "",
+    like: str | int | None = None,
+    auto_maintain: bool = True,
+) -> Identity:
+    """Create a playlist without a proposal, optionally copying rules and examples from another."""
+    if kind not in KINDS:
+        raise ValueError(f"kind must be one of: {', '.join(KINDS)}")
+    rules: dict[str, Any] = {
+        "tags": {},
+        "avoid_tags": [],
+        "require_tags": [],
+        "years": None,
+        "years_mode": "prefer",
+    }
+    origin: dict[str, Any] = {"created": "manual"}
+    source = get_identity(db, like) if like is not None else None
+    if source is not None:
+        rules = json.loads(json.dumps(source.rules))
+        origin = {"created": "copy", "copied_from": source.identity_id}
+    now = utcnow()
+    with db.transaction():
+        cur = db.conn.execute(
+            """INSERT INTO identities (name, kind, concept, status, auto_maintain, rules_json,
+                   origin_json, created_at, updated_at) VALUES (?,?,?,'approved',?,?,?,?,?)""",
+            (
+                name,
+                kind,
+                concept,
+                int(auto_maintain),
+                json.dumps(rules),
+                json.dumps(origin),
+                now,
+                now,
+            ),
+        )
+        new_id = int(cur.lastrowid or 0)
+        if source is not None:
+            db.conn.execute(
+                """INSERT INTO identity_examples (identity_id, uri, role, source, added_at)
+                   SELECT ?, uri, role, source, ? FROM identity_examples WHERE identity_id=?""",
+                (new_id, now, source.identity_id),
+            )
+    return get_identity(db, new_id)
 
 
 def set_status(db: Database, ref: str | int, status: str) -> Identity:

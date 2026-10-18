@@ -508,6 +508,24 @@ def load_proposals(db: Database, *, include_decided: bool = False) -> list[Propo
     return out
 
 
+def resolve_proposal(db: Database, ref: str | int) -> int:
+    """A pending proposal by number or by (unique) title."""
+    if str(ref).isdigit():
+        return int(ref)
+    hits = [
+        r[0]
+        for r in db.conn.execute(
+            "SELECT proposal_id, title FROM proposals WHERE status='pending'"
+        ).fetchall()
+        if r[1].casefold() == str(ref).casefold()
+    ]
+    if len(hits) == 1:
+        return hits[0]
+    raise KeyError(
+        f"No pending proposal called {ref!r}" if not hits else f"Several proposals called {ref!r}"
+    )
+
+
 def accept(db: Database, proposal_id: int, *, name: str | None = None) -> int:
     """Turn a proposal into a playlist identity you can edit. Returns the identity id."""
     row = db.conn.execute("SELECT * FROM proposals WHERE proposal_id=?", (proposal_id,)).fetchone()

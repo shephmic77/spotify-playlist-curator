@@ -172,7 +172,11 @@ def cmd_proposals_accept(settings: Settings, args: argparse.Namespace) -> int:
         done = []
         for pid in args.ids:
             try:
-                iid = disc.accept(db, int(pid), name=args.name if len(args.ids) == 1 else None)
+                iid = disc.accept(
+                    db,
+                    disc.resolve_proposal(db, pid),
+                    name=args.name if len(args.ids) == 1 else None,
+                )
                 done.append((pid, idn.get_identity(db, iid)))
             except (KeyError, ValueError) as exc:
                 print(f"  ! {exc}", file=sys.stderr)
@@ -188,7 +192,7 @@ def cmd_proposals_reject(settings: Settings, args: argparse.Namespace) -> int:
     with db:
         for pid in args.ids:
             try:
-                disc.reject(db, int(pid))
+                disc.reject(db, disc.resolve_proposal(db, pid))
                 print(f"Rejected [{pid}]")
             except KeyError as exc:
                 print(f"  ! {exc.args[0]}", file=sys.stderr)
@@ -224,6 +228,8 @@ def _print_identity(i: idn.Identity, examples: list[dict[str, Any]] | None = Non
         )
     if i.rules.get("avoid_tags"):
         print("    avoid: " + ", ".join(i.rules["avoid_tags"]))
+    if i.rules.get("require_tags"):
+        print("    must have one of: " + ", ".join(i.rules["require_tags"]))
     if i.rules.get("years"):
         print(f"    years (preferred): {i.rules['years'][0]}–{i.rules['years'][1]}")
     ex = ", ".join(f"{n} {role}" for role, n in sorted(i.examples.items())) or "none"
@@ -275,8 +281,31 @@ def cmd_identities_edit(settings: Settings, args: argparse.Namespace) -> int:
                 remove_tags=args.remove_tag,
                 avoid_tags=args.avoid_tag,
                 unavoid_tags=args.unavoid_tag,
+                require_tags=args.require_tag,
+                unrequire_tags=args.unrequire_tag,
                 years=idn.parse_years(args.years) if args.years is not None else "keep",
                 auto_maintain=args.auto,
+            )
+        except (LookupError, ValueError) as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        _print_identity(i)
+    return 0
+
+
+def cmd_identities_new(settings: Settings, args: argparse.Namespace) -> int:
+    db = _db(settings)
+    if db is None:
+        return 1
+    with db:
+        try:
+            i = idn.create_identity(
+                db,
+                args.name,
+                kind=args.kind,
+                concept=args.concept,
+                like=args.like,
+                auto_maintain=not args.handpicked,
             )
         except (LookupError, ValueError) as exc:
             print(exc, file=sys.stderr)
@@ -322,7 +351,7 @@ def register(sub: Any) -> None:
     props.add_argument("--all", action="store_true", help="include accepted/rejected")
     props.set_defaults(func=cmd_proposals_list)
     p = psub.add_parser("accept", help="accept proposal(s) as playlists")
-    p.add_argument("ids", nargs="+")
+    p.add_argument("ids", nargs="+", help="numbers or names")
     p.add_argument("--name", help="rename (only when accepting one)")
     p.set_defaults(func=cmd_proposals_accept)
     p = psub.add_parser("reject", help="reject proposal(s)")
@@ -349,6 +378,13 @@ def register(sub: Any) -> None:
     p.add_argument("--remove-tag", action="append", metavar="TAG")
     p.add_argument("--avoid-tag", action="append", metavar="TAG")
     p.add_argument("--unavoid-tag", action="append", metavar="TAG")
+    p.add_argument(
+        "--require-tag",
+        action="append",
+        metavar="TAG",
+        help="songs must have at least one required tag",
+    )
+    p.add_argument("--unrequire-tag", action="append", metavar="TAG")
     p.add_argument("--years", metavar="FROM-TO|none")
     auto = p.add_mutually_exclusive_group()
     auto.add_argument(
@@ -362,6 +398,13 @@ def register(sub: Any) -> None:
         "--handpicked", dest="auto", action="store_false", help="never add songs automatically"
     )
     p.set_defaults(func=cmd_identities_edit)
+    p = dsub.add_parser("new", help="create a playlist without a proposal")
+    p.add_argument("name")
+    p.add_argument("--kind", choices=it.KINDS, default="sound")
+    p.add_argument("--concept", default="")
+    p.add_argument("--like", help="copy tags, rules and example songs from this playlist")
+    p.add_argument("--handpicked", action="store_true", help="never add songs automatically")
+    p.set_defaults(func=cmd_identities_new)
     p = dsub.add_parser("status", help="approve, reject or retire")
     p.add_argument("ref")
     p.add_argument("status", choices=idn.STATUSES)
