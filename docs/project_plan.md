@@ -83,9 +83,15 @@ Delivered:
   rate, manual adds, churn and a holdout agreement check.
 - 189 tests.
 
-## Phase 6 — Spotify playlist creation
+## Phase 6 — Spotify playlist creation ✅
 
-Write scopes added. Registry of app-managed playlists (Spotify ID, identity version). Preview
+Done: `spotify/sync.py`, `cli_sync.py`, *Spotify sync* UI tab, schema v7 (`managed_playlists`,
+`playlist_snapshots`, `sync_runs`). Preview by default; apply needs write scopes and typed
+confirmation. Writes guarded to the registry; before/after snapshots; diff by recording; manual
+Spotify edits respected and recorded as feedback; verify by re-read; rollback to any snapshot;
+deleted playlists re-created; release; importer skips managed playlists. 202 tests.
+
+Original plan: Write scopes added. Registry of app-managed playlists (Spotify ID, identity version). Preview
 → approve → create private playlists → add in ≤100 chunks → re-read and verify → record
 snapshot. Before any change: store previous state; compute minimal diff; detect manual edits
 made in Spotify since last sync; rollback to saved states. Local-file to-do list.

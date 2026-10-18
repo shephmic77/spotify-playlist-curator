@@ -270,6 +270,47 @@ MIGRATIONS: list[str] = [
         decided_at  TEXT NOT NULL
     );
     """,
+    # v7 - Phase 6: playlists the app created in Spotify, snapshots for rollback, sync log
+    """
+    -- The ONLY Spotify playlists the app may change. One per playlist identity.
+    CREATE TABLE managed_playlists (
+        identity_id      INTEGER PRIMARY KEY REFERENCES identities(identity_id),
+        spotify_id       TEXT NOT NULL UNIQUE,
+        name             TEXT NOT NULL,
+        description      TEXT,
+        -- active | missing (deleted in Spotify) | released (you stopped syncing it)
+        status           TEXT NOT NULL,
+        last_snapshot_id TEXT,
+        -- URIs as they were right after the app's last successful write; used to spot
+        -- songs you added or removed yourself in Spotify since then
+        last_uris_json   TEXT NOT NULL,
+        created_at       TEXT NOT NULL,
+        last_synced_at   TEXT
+    );
+
+    -- State of a managed playlist before (and after) each change, for rollback.
+    CREATE TABLE playlist_snapshots (
+        snapshot_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+        identity_id  INTEGER NOT NULL,
+        spotify_id   TEXT NOT NULL,
+        taken_at     TEXT NOT NULL,
+        -- before_sync | after_sync | before_rollback | after_rollback
+        reason       TEXT NOT NULL,
+        uris_json    TEXT NOT NULL,
+        sync_run_id  INTEGER
+    );
+    CREATE INDEX idx_snapshots_identity ON playlist_snapshots(identity_id, snapshot_id);
+
+    CREATE TABLE sync_runs (
+        run_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        started_at   TEXT NOT NULL,
+        finished_at  TEXT,
+        -- running | ok | partial | failed
+        status       TEXT NOT NULL,
+        summary_json TEXT,
+        errors_json  TEXT
+    );
+    """,
 ]
 
 

@@ -132,8 +132,10 @@ def import_library(
         # ---- fetch: playlists --------------------------------------------------
         say("Reading playlists ...")
         summaries: dict[str, PlaylistSummary] = {}
+        # Playlists the app created (Phase 6) are output, not source material: skip them
+        managed_ids = {r[0] for r in db.conn.execute("SELECT spotify_id FROM managed_playlists")}
         for raw in client.iter_my_playlists():
-            if raw and raw.get("id"):
+            if raw and raw.get("id") and raw["id"] not in managed_ids:
                 summaries.setdefault(raw["id"], parse_playlist_summary(raw))
         counts.playlists_seen = len(summaries)
 

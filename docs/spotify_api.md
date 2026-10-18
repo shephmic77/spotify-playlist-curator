@@ -36,8 +36,9 @@ Scopes requested in Phase 1 (read-only):
 | `playlist-read-private` | `GET /me/playlists`, `GET /playlists/{id}/items` |
 | `playlist-read-collaborative` | collaborative playlists |
 
-Phase 6 adds `playlist-modify-private` and `playlist-modify-public` and will require logging in
-again. No scope that can modify Liked Songs is ever requested.
+Since Phase 6, `curator auth login` also requests `playlist-modify-private` and
+`playlist-modify-public` (log in again once to grant them). They are only used on playlists in
+the app's own registry. `curator auth login --read-only` keeps the old read-only set. No scope that can modify Liked Songs is ever requested.
 
 ## Endpoints used
 

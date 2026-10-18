@@ -10,8 +10,9 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
-# Read-only scopes are all Phase 1 needs. Write scopes are added when playlist creation
-# lands (Phase 6) and will require logging in again so you explicitly grant them.
+# Read scopes import your library. Write scopes (Phase 6) let the app create and update the
+# playlists it makes; it never writes to playlists it didn't create, and no scope that can
+# change Liked Songs is ever requested. `curator auth login --read-only` skips write scopes.
 READ_SCOPES: tuple[str, ...] = (
     "user-library-read",  # GET /me/tracks (Liked Songs)
     "playlist-read-private",  # GET /me/playlists, GET /playlists/{id}/items for private lists
@@ -35,7 +36,7 @@ class Settings:
     client_id: str
     redirect_uri: str = DEFAULT_REDIRECT_URI
     data_dir: Path = field(default_factory=lambda: Path("data"))
-    scopes: tuple[str, ...] = READ_SCOPES
+    scopes: tuple[str, ...] = READ_SCOPES + WRITE_SCOPES
     log_level: str = "INFO"
     lastfm_api_key: str = ""
     # Optional: lets `curator describe` translate free-form descriptions with Claude.

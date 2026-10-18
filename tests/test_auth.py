@@ -60,7 +60,20 @@ def test_authorize_url_has_required_params(settings):
     assert q["code_challenge"] == "chal"
     assert q["state"] == "st"
     assert "playlist-read-private" in q["scope"].split()
-    assert not any("modify" in s for s in q["scope"].split()), "Phase 1 must stay read-only"
+    scopes = set(q["scope"].split())
+    # Phase 6: may create/update its own playlists; never anything that changes Liked Songs
+    assert {"playlist-modify-private", "playlist-modify-public"} <= scopes
+    assert "user-library-modify" not in scopes
+
+
+def test_read_only_login_requests_no_write_scopes(settings):
+    import dataclasses
+
+    from playlist_curator.config import READ_SCOPES
+
+    ro = dataclasses.replace(settings, scopes=READ_SCOPES)
+    q = parse_qs(urlparse(build_authorize_url(ro, "c", "s")).query)
+    assert not any("modify" in s for s in q["scope"][0].split())
 
 
 def test_callback_parsing_validates_state_and_errors():

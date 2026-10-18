@@ -18,18 +18,17 @@ or deletes your original playlists.
 | 3b | Proposals for a new collection (from your descriptions + library clusters); editable playlist definitions | **Done** |
 | 4 | Describe playlists in your own words; score songs into draft playlists with reasons | **Done** |
 | 5 | Feedback: keep / reject / essential per song, learning per playlist, metrics | **Done** |
-| 6 | Create approved playlists in Spotify (preview, approve, write, rollback) | Next |
-| 4 | Multi-label scoring and draft playlists | Planned |
-| 5 | Feedback and personalization | Planned |
-| 6 | Creating playlists in Spotify (preview → approve → write, rollback) | Planned |
-| 7 | Automatic maintenance and drift control | Planned |
+| 6 | Create approved playlists in Spotify (preview, approve, write, verify, rollback) | **Done** |
+| 7 | Automatic maintenance and drift control | Next |
 | 8 | Refinement | Planned |
 
 See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
 
 ## What works today
 
-- Secure login with OAuth Authorization Code + PKCE (no client secret; read-only scopes).
+- Secure login with OAuth Authorization Code + PKCE (no client secret). Write scopes only
+  cover playlists; nothing can modify Liked Songs. `curator auth login --read-only` if you
+  just want to browse.
 - Token caching with automatic refresh and owner-only file permissions.
 - Import of Liked Songs and all playlists in your library, with pagination, rate-limit
   handling (`Retry-After`), retries with backoff, and clear errors.
@@ -66,6 +65,14 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
   essential songs are always in. Songs already in a draft need less to stay than new songs need
   to get in, so playlists don't flip-flop. `curator stats --evaluate` shows acceptance rates,
   changes between drafts and a holdout check.
+- **Your playlists in Spotify** (Phase 6): `curator sync` previews exactly what would be
+  created or changed; `curator sync --apply` writes it after you type `yes`. New playlists are
+  private. The app only ever writes to playlists it created itself (kept in a registry), saves
+  each playlist's state before and after every change, sends minimal changes (never re-adds a
+  song that's already there under another copy), re-reads to verify, and can roll back
+  (`curator rollback "Name"`). Songs you add or remove in Spotify by hand are respected and
+  count as keep / reject feedback. Local files go on a to-do list (`curator sync local-files`),
+  because the API can't add them. Also available in the UI's *Spotify sync* tab.
 - **Analysis of your existing playlists** (`curator analyze`): each playlist's sound and era,
   cohesion, songs that don't fit, drift between early and later additions, staleness, and
   overlapping or redundant playlists.
@@ -169,6 +176,12 @@ curator duplicates same|different <id>   # decide one suggestion by id
 curator duplicates split <uri>           # pull one copy out of its group
 curator duplicates decisions | undo <id> # see / reverse your decisions
 curator local-files         # local files, where they are, what they match
+curator sync [--songs] [--only "Name"]   # preview changes to Spotify (writes nothing)
+curator sync --apply        # write them (asks you to type yes)
+curator sync managed        # playlists the app created, with links
+curator sync history "Name" | curator rollback "Name" [--to ID]
+curator sync release "Name" # stop syncing a playlist; it stays in Spotify as is
+curator sync local-files    # local files to add to playlists by hand
 curator purge               # delete local database + tokens; does not touch Spotify
 curator -v import           # debug logging
 ```

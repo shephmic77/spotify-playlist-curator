@@ -35,6 +35,7 @@ class FakeSpotify:
         # path -> list of queued (status, headers, body) responses served before normal ones
         self.injected: dict[str, list[tuple[int, dict[str, str], Any]]] = {}
         self.on_request: Callable[[httpx.Request], None] | None = None
+        self.snap_counter = 0
 
     # -- helpers for tests -------------------------------------------------
 
@@ -67,6 +68,20 @@ class FakeSpotify:
             return None
         if key == "__episode__":
             return copy.deepcopy(self.lib["episode"])
+        if key.startswith("spotify:"):  # entries written through the API are stored as URIs
+            for t in self.lib["tracks"].values():
+                if t["uri"] == key:
+                    return copy.deepcopy(t)
+            tid = key.split(":")[-1]
+            return {
+                "type": "track",
+                "id": tid,
+                "uri": key,
+                "name": f"Track {tid}",
+                "artists": [{"id": "a", "name": "Someone"}],
+                "album": {},
+                "is_local": False,
+            }
         return copy.deepcopy(self.lib["tracks"][key])
 
     def _page(self, request: httpx.Request, items: list[Any]) -> dict[str, Any]:
@@ -163,22 +178,55 @@ class FakeSpotify:
                 return httpx.Response(200, json=self._page(request, items))
             body = json.loads(request.content) if request.content else None
             self.write_bodies.append((m, path, body))
+            if p["owner"]["id"] != self.lib["me"]["id"]:
+                return httpx.Response(403, json={"error": {"status": 403, "message": "Forbidden"}})
+            entries = p["entries"]
+            if m == "POST":
+                uris = body["uris"]
+                assert len(uris) <= 100
+                pos = body.get("position")
+                if pos is None:
+                    entries.extend(uris)
+                else:
+                    entries[pos:pos] = uris
+            elif m == "DELETE":
+                assert len(body["items"]) <= 100
+                gone = {x["uri"] for x in body["items"]}
+                p["entries"] = [e for e in entries if (self._track(e) or {}).get("uri") not in gone]
+            elif m == "PUT":
+                assert len(body["uris"]) <= 100
+                p["entries"] = list(body["uris"])
+            self.snap_counter += 1
+            p["snapshot_id"] = f"snap_{pid}_{self.snap_counter}"
             return httpx.Response(
-                201 if m == "POST" else 200,
-                json={"snapshot_id": f"snap_after_{len(self.write_bodies)}"},
+                201 if m == "POST" else 200, json={"snapshot_id": p["snapshot_id"]}
             )
         if m == "POST" and path == "/me/playlists":
             body = json.loads(request.content)
             self.write_bodies.append((m, path, body))
-            return httpx.Response(
-                201,
-                json={
-                    "id": "pl_new",
-                    "name": body["name"],
-                    "public": body.get("public"),
-                    "snapshot_id": "snap_new",
-                },
-            )
+            self.snap_counter += 1
+            pid = f"pl_new{self.snap_counter}"
+            new = {
+                "id": pid,
+                "name": body["name"],
+                "description": body.get("description"),
+                "public": body.get("public", True),
+                "collaborative": False,
+                "snapshot_id": f"snap_{pid}_0",
+                "owner": self.lib["me"] | {"display_name": "Me"},
+                "entries": [],
+            }
+            self.lib["playlists"].append(new)
+            return httpx.Response(201, json={k: v for k, v in new.items() if k != "entries"})
+        if m == "PUT" and path.startswith("/playlists/"):
+            pid = path.split("/")[2]
+            body = json.loads(request.content)
+            self.write_bodies.append((m, path, body))
+            p = self.playlist(pid)
+            for k in ("name", "description", "public"):
+                if k in body:
+                    p[k] = body[k]
+            return httpx.Response(200)
         return httpx.Response(404, json={"error": {"status": 404, "message": f"no route {path}"}})
 
 

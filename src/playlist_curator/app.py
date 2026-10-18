@@ -33,6 +33,7 @@ from playlist_curator.curator import identities as idn
 from playlist_curator.curator import intents as it
 from playlist_curator.curator import scoring as sc
 from playlist_curator.curator.analysis import analyze
+from playlist_curator.spotify import sync
 from playlist_curator.spotify.auth import AuthError, TokenManager, TokenStore
 from playlist_curator.spotify.client import SpotifyAPIError, SpotifyClient
 from playlist_curator.storage.database import Database
@@ -147,19 +148,28 @@ if draft_run is not None:
 else:
     st.caption("Build drafts (Draft playlists tab) to see which songs fit no playlist.")
 
-tab_new, tab_drafts, tab_analysis, tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = (
-    st.tabs(
-        [
-            f"New collection ({len(proposals)} to review)",
-            "Draft playlists",
-            "Old playlist analysis",
-            "Songs",
-            f"Duplicates ({len(suggestions)} to review)",
-            "Local files",
-            "Source playlists",
-            "Import history",
-        ]
-    )
+(
+    tab_new,
+    tab_drafts,
+    tab_sync,
+    tab_analysis,
+    tab_songs,
+    tab_dups,
+    tab_local,
+    tab_playlists,
+    tab_runs,
+) = st.tabs(
+    [
+        f"New collection ({len(proposals)} to review)",
+        "Draft playlists",
+        "Spotify sync",
+        "Old playlist analysis",
+        "Songs",
+        f"Duplicates ({len(suggestions)} to review)",
+        "Local files",
+        "Source playlists",
+        "Import history",
+    ]
 )
 
 
@@ -485,6 +495,88 @@ with tab_drafts:
                     f"({round(100 * x['in_rejected'])}% vs {round(100 * x['in_examples'])}% of "
                     "examples). Add it to 'Avoid tags' in New collection if that's the pattern."
                 )
+
+
+with tab_sync:
+    st.caption(
+        "Writes only to playlists this app creates (private). Your old playlists and Liked "
+        "Songs are never touched. Every change is previewed, saved for rollback, and verified."
+    )
+    with Database(settings.db_path) as db:
+        reg = sync.managed(db)
+        last = sync.last_sync(db)
+        local_actions = sync.local_file_actions(db)
+    c1, c2 = st.columns(2)
+    c1.metric("Playlists in Spotify (managed)", len(reg))
+    c2.metric("Last successful sync", last["finished_at"][:16] if last else "never")
+    if st.button("Preview changes", type="primary", disabled=draft_run is None):
+        try:
+            with Database(settings.db_path) as db:
+                st.session_state["sync_plan"] = sync.plan(db, SpotifyClient(TokenManager(settings)))
+        except (sync.SyncError, ConfigError, AuthError, SpotifyAPIError) as exc:
+            st.error(str(exc))
+    plan_obj = st.session_state.get("sync_plan")
+    if plan_obj is not None:
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "playlist": x.name,
+                        "action": x.action,
+                        "now": x.current_count,
+                        "add": len(x.add),
+                        "remove": len(x.remove),
+                        "your Spotify edits kept": len(x.keep_manual_adds)
+                        + len(x.respect_manual_removes),
+                        "local files (by hand)": len(x.local_files),
+                        "note": x.note,
+                    }
+                    for x in plan_obj.playlists
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+        if plan_obj.writes:
+            ok = st.checkbox(
+                f"I've checked the preview. Write changes to {plan_obj.writes} playlist(s)."
+            )
+            if st.button("Apply to Spotify", disabled=not ok):
+                try:
+                    with Database(settings.db_path) as db:
+                        res = sync.apply(
+                            db,
+                            SpotifyClient(TokenManager(settings)),
+                            plan_obj,
+                            progress=st.write,
+                        )
+                    st.success(f"Sync {res.status}: {len(res.applied)} playlist(s) written.")
+                    for e in res.errors:
+                        st.error(f"{e['playlist']}: {e['error']}")
+                    st.session_state.pop("sync_plan", None)
+                except (ConfigError, AuthError, SpotifyAPIError) as exc:
+                    st.error(str(exc))
+        else:
+            st.success("Nothing to change in Spotify.")
+    if last and last["errors"]:
+        for e in last["errors"]:
+            st.warning(f"Last sync: {e['playlist']}: {e['error']}")
+    if local_actions:
+        st.subheader("Add these local files by hand")
+        st.caption(
+            "Spotify's API can't add local files. In the desktop app: Your Library → Local "
+            "Files → right-click → Add to playlist."
+        )
+        for name, songs in local_actions:
+            st.markdown(f"**{name}**: " + "; ".join(songs))
+    if reg:
+        st.subheader("Managed playlists")
+        for entry in reg.values():
+            st.markdown(
+                f"[{entry['name']}](https://open.spotify.com/playlist/{entry['spotify_id']}) · "
+                f"last synced {entry['last_synced_at'] or '-'} · rollback: "
+                f'`curator rollback "{entry["name"]}"`'
+            )
 
 
 with tab_analysis:

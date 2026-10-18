@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import logging
 import subprocess
@@ -10,8 +11,14 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from playlist_curator import cli_concepts, cli_drafts, cli_feedback
-from playlist_curator.config import ConfigError, Settings, configure_logging, load_settings
+from playlist_curator import cli_concepts, cli_drafts, cli_feedback, cli_sync
+from playlist_curator.config import (
+    READ_SCOPES,
+    ConfigError,
+    Settings,
+    configure_logging,
+    load_settings,
+)
 from playlist_curator.crate import deduplication as dedup
 from playlist_curator.crate.importer import AccountMismatchError, import_library
 from playlist_curator.crate.inventory import (
@@ -38,6 +45,8 @@ def _client(settings: Settings) -> SpotifyClient:
 
 
 def cmd_auth_login(settings: Settings, args: argparse.Namespace) -> int:
+    if args.read_only:
+        settings = dataclasses.replace(settings, scopes=READ_SCOPES)
     login(settings, manual=args.manual)
     client = _client(settings)
     me = client.me()
@@ -516,6 +525,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--manual", action="store_true", help="paste the redirect URL instead of a local server"
     )
+    p.add_argument(
+        "--read-only", action="store_true", help="don't grant permission to create playlists"
+    )
     p.set_defaults(func=cmd_auth_login)
     auth.add_parser("status", help="show the logged-in account").set_defaults(func=cmd_auth_status)
     auth.add_parser("logout", help="delete saved tokens").set_defaults(func=cmd_auth_logout)
@@ -577,6 +589,7 @@ def build_parser() -> argparse.ArgumentParser:
     cli_concepts.register(sub)
     cli_drafts.register(sub)
     cli_feedback.register(sub)
+    cli_sync.register(sub)
 
     sub.add_parser("ui", help="open the Streamlit interface").set_defaults(func=cmd_ui)
     return parser

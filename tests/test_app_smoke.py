@@ -85,6 +85,7 @@ def _fake_streamlit() -> types.ModuleType:
     st.form = lambda *a, **k: _Ctx()
     st.status = lambda *a, **k: _Ctx()
     st.sidebar = _Ctx()
+    st.session_state = {}
 
     def stop():
         raise SystemExit

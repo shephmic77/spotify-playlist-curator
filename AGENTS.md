@@ -16,7 +16,8 @@ keep them that way. Quality and user control beat automation and coverage.
    to "classify" exported library data. Classification must be rule-based and transparent.
 3. **Never modify Liked Songs.** The app requests no library-write scope.
 4. **Never delete, rename, overwrite, or unfollow playlists the app did not create.** Writes
-   go only to playlists listed in the app's own registry (Phase 6).
+   go only to playlists listed in the app's own registry (`managed_playlists`; enforced by
+   `sync._guard`). The importer skips those playlists so app output never feeds back in.
 5. **First rebuild is preview-only.** Spotify writes require explicit approval in the UI/CLI.
    New playlists are private by default.
 6. **Never claim a local file was added via the API.** `SpotifyClient` refuses local URIs.

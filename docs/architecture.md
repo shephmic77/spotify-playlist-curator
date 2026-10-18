@@ -19,6 +19,7 @@ src/playlist_curator/
   spotify/
     auth.py            PKCE login, local callback server, token store, refresh
     client.py          HTTP client: retries, 429, pagination, endpoint methods
+    sync.py            Phase 6: plan / apply / verify / snapshots / rollback, registry guard
   crate/
     importer.py        Fetch Liked Songs + playlists, then write in one transaction
     deduplication.py   Group URIs into recordings; suggestions; user decisions
@@ -38,6 +39,7 @@ src/playlist_curator/
   cli_concepts.py      CLI for intents / propose / proposals / identities
   cli_drafts.py        CLI for describe / draft / drafts
   cli_feedback.py      CLI for review / feedback / decisions / stats
+  cli_sync.py          CLI for sync / rollback / local-files to-do
   storage/
     database.py        SQLite schema, migrations, queries, purge
   cli.py               `curator` command
@@ -66,7 +68,7 @@ SQLite (crate) + metadata providers + user identities/feedback
    ──► review UI ──► approved change set ──► spotify/sync (diff, apply, verify, log)
 ```
 
-## Database (schema v6)
+## Database (schema v7)
 
 | Table | Purpose |
 |---|---|
@@ -86,6 +88,9 @@ SQLite (crate) + metadata providers + user identities/feedback
 | `draft_runs`, `draft_members` | *derived* — draft playlists from `curator draft` (include / review, scores, reasons); last 5 runs kept |
 | `feedback` | **user data** — latest keep / reject / essential / uncertain per playlist + song, with the prior example role for undo |
 | `feedback_log` | **user data** — append-only history of decisions, for metrics |
+| `managed_playlists` | **user data** — playlists the app created: identity, Spotify id, status, last written URIs (to detect your manual edits) |
+| `playlist_snapshots` | **user data** — URIs of a managed playlist before/after each sync or rollback |
+| `sync_runs` | log of syncs with results and errors |
 | `metadata_cache` | trimmed MusicBrainz / Last.fm responses keyed by provider + lookup key, with expiry. Descriptors are computed from it on demand |
 
 Tracks stay keyed by URI. Recordings are a layer on top, rebuilt from tracks + decisions, so
