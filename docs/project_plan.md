@@ -96,9 +96,19 @@ Original plan: Write scopes added. Registry of app-managed playlists (Spotify ID
 snapshot. Before any change: store previous state; compute minimal diff; detect manual edits
 made in Spotify since last sync; rollback to saved states. Local-file to-do list.
 
-## Phase 7 — Automatic maintenance
+## Phase 7 — Automatic maintenance ✅
 
-Detect crate changes (already recorded per import), score only affected songs, apply hysteresis,
+Done: `curator/maintenance.py`, `cli_maintain.py`, maintenance section in the *Spotify sync*
+tab, schema v8 (`maintenance_runs`), settings in `meta`. A run = import → enrich missing tags →
+redraft (hysteresis) → sync plan → drift guards → apply allowed changes only if auto-apply is
+on. Guards: never auto-create; per-playlist change limit max(N songs, share × size); hold all
+when the import is partial or the library shrinks past a limit. Every run is logged and a
+plain-text report saved to `data/reports/latest-maintenance.txt`. Scheduling via Windows Task
+Scheduler (`schtasks`, wrapper in `data/run_maintenance.cmd`) or a printed cron line. Deviation
+from the plan: the whole library is rescored each run (a second or two at this size) instead
+of only affected songs; simpler and can't miss a song. 211 tests.
+
+Original plan: Detect crate changes (already recorded per import), score only affected songs, apply hysteresis,
 produce change set, apply automatically only if the owner enabled it. Optional scheduling via
 OS scheduler (cron / Task Scheduler) calling `scripts/run_sync.py`; no background service.
 

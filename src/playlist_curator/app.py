@@ -31,6 +31,7 @@ from playlist_curator.curator import discovery as disc
 from playlist_curator.curator import feedback as fb
 from playlist_curator.curator import identities as idn
 from playlist_curator.curator import intents as it
+from playlist_curator.curator import maintenance
 from playlist_curator.curator import scoring as sc
 from playlist_curator.curator.analysis import analyze
 from playlist_curator.spotify import sync
@@ -577,6 +578,64 @@ with tab_sync:
                 f"last synced {entry['last_synced_at'] or '-'} · rollback: "
                 f'`curator rollback "{entry["name"]}"`'
             )
+
+    with st.expander("Automatic maintenance (Phase 7)"):
+        st.caption(
+            "Maintenance imports your library, rebuilds the drafts and compares them with "
+            "Spotify. Small changes can go through on their own; new playlists and big "
+            "changes always wait for you here. Schedule it with "
+            "`curator maintain schedule --install`."
+        )
+        with Database(settings.db_path) as db:
+            mcfg = maintenance.load_settings(db)
+            mruns = maintenance.last_runs(db, 5)
+        auto = st.checkbox("Write small changes to Spotify automatically", value=mcfg.auto_apply)
+        c1, c2, c3 = st.columns(3)
+        max_n = c1.number_input("Songs per playlist", 0, 500, mcfg.max_changes)
+        max_s = c2.number_input("or share of playlist", 0.0, 1.0, mcfg.max_change_share, step=0.05)
+        shrink = c3.number_input(
+            "Hold all if library shrinks by", 0.0, 1.0, mcfg.max_library_shrink, step=0.05
+        )
+        if st.button("Save maintenance settings"):
+            with Database(settings.db_path) as db:
+                maintenance.save_settings(
+                    db,
+                    auto_apply=bool(auto),
+                    max_changes=int(max_n),
+                    max_change_share=float(max_s),
+                    max_library_shrink=float(shrink),
+                )
+            st.success("Saved.")
+        if st.button("Check for changes now (preview, no tagging)"):
+            try:
+                with Database(settings.db_path) as db:
+                    mres = maintenance.run(db, SpotifyClient(TokenManager(settings)), apply=False)
+                st.code(maintenance.report(mres), language=None)
+            except (sync.SyncError, ConfigError, AuthError, SpotifyAPIError) as exc:
+                st.error(str(exc))
+        if mruns:
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "run": r["run_id"],
+                            "started": r["started_at"][:16],
+                            "trigger": r["trigger"],
+                            "mode": r["mode"],
+                            "status": r["status"],
+                            "new songs": r["summary"].get("new_songs", 0),
+                            "updated": len(r["summary"].get("applied", [])),
+                            "waiting for you": len(r["summary"].get("held", [])),
+                            "problems": len(r["errors"]),
+                        }
+                        for r in mruns
+                    ]
+                ),
+                width="stretch",
+                hide_index=True,
+            )
+            for c in mruns[0]["summary"].get("held", []):
+                st.warning(f"{c['playlist']}: +{c['add']} / -{c['remove']} ({c['reason']})")
 
 
 with tab_analysis:

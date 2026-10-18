@@ -19,7 +19,8 @@ keep them that way. Quality and user control beat automation and coverage.
    go only to playlists listed in the app's own registry (`managed_playlists`; enforced by
    `sync._guard`). The importer skips those playlists so app output never feeds back in.
 5. **First rebuild is preview-only.** Spotify writes require explicit approval in the UI/CLI.
-   New playlists are private by default.
+   New playlists are private by default. Automatic maintenance (Phase 7) writes only when the
+   owner turned on auto-apply, never creates playlists, and goes through `sync.apply`.
 6. **Never claim a local file was added via the API.** `SpotifyClient` refuses local URIs.
 7. **Never fabricate** tracks, API responses, mood/genre/energy descriptors, or evaluation
    scores. Missing data stays missing (`None`) and is surfaced as "unknown".

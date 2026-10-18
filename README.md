@@ -19,8 +19,8 @@ or deletes your original playlists.
 | 4 | Describe playlists in your own words; score songs into draft playlists with reasons | **Done** |
 | 5 | Feedback: keep / reject / essential per song, learning per playlist, metrics | **Done** |
 | 6 | Create approved playlists in Spotify (preview, approve, write, verify, rollback) | **Done** |
-| 7 | Automatic maintenance and drift control | Next |
-| 8 | Refinement | Planned |
+| 7 | Automatic maintenance and drift control | **Done** |
+| 8 | Refinement | Next |
 
 See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
 
@@ -73,6 +73,14 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
   (`curator rollback "Name"`). Songs you add or remove in Spotify by hand are respected and
   count as keep / reject feedback. Local files go on a to-do list (`curator sync local-files`),
   because the API can't add them. Also available in the UI's *Spotify sync* tab.
+- **Automatic maintenance** (Phase 7): `curator maintain` imports your library, tags only new
+  songs, rebuilds the drafts and compares them with Spotify. By default it only prepares a
+  preview; turn on `curator maintain settings --auto-apply on` to let small changes through on
+  their own. Drift guards hold a playlist for your approval when it's new, when it would change
+  by more than 10 songs or 25% (configurable), or when the import was incomplete or your
+  library shrank by more than 10%. `curator maintain schedule --install` runs it daily (or
+  `--every weekly`) with Windows Task Scheduler; no background service. `curator maintain
+  status` shows recent runs and anything waiting for you.
 - **Analysis of your existing playlists** (`curator analyze`): each playlist's sound and era,
   cohesion, songs that don't fit, drift between early and later additions, staleness, and
   overlapping or redundant playlists.
@@ -182,6 +190,10 @@ curator sync managed        # playlists the app created, with links
 curator sync history "Name" | curator rollback "Name" [--to ID]
 curator sync release "Name" # stop syncing a playlist; it stays in Spotify as is
 curator sync local-files    # local files to add to playlists by hand
+curator maintain            # import + tag new + redraft + compare (writes only if auto is on)
+curator maintain status     # settings, schedule, recent runs, what's waiting for you
+curator maintain settings --auto-apply on [--max-changes 10 --max-share 0.25 --max-shrink 0.1]
+curator maintain schedule --install [--every weekly] [--at 09:00]   # or --remove
 curator purge               # delete local database + tokens; does not touch Spotify
 curator -v import           # debug logging
 ```

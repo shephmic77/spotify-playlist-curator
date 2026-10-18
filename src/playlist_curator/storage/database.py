@@ -311,6 +311,22 @@ MIGRATIONS: list[str] = [
         errors_json  TEXT
     );
     """,
+    # v8 (Phase 7): automatic maintenance runs
+    """
+    CREATE TABLE maintenance_runs (
+        run_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        started_at   TEXT NOT NULL,
+        finished_at  TEXT,
+        -- manual | scheduled
+        trigger      TEXT NOT NULL,
+        -- preview (nothing written) | auto (allowed changes written)
+        mode         TEXT NOT NULL,
+        -- running | ok | held (some playlists need your approval) | partial | failed
+        status       TEXT NOT NULL,
+        summary_json TEXT,
+        errors_json  TEXT
+    );
+    """,
 ]
 
 

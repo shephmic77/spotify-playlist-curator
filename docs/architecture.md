@@ -36,10 +36,12 @@ src/playlist_curator/
     describe.py        Your words -> tag recipe (offline dictionary or Claude, text only)
     scoring.py         Phase 4: per-playlist scoring, adaptive thresholds, draft playlists
     feedback.py        Phase 5: decisions, undo, avoid-tag suggestions, stats, holdout check
+    maintenance.py     Phase 7: import → tag new → redraft → plan → drift guards → apply
   cli_concepts.py      CLI for intents / propose / proposals / identities
   cli_drafts.py        CLI for describe / draft / drafts
   cli_feedback.py      CLI for review / feedback / decisions / stats
   cli_sync.py          CLI for sync / rollback / local-files to-do
+  cli_maintain.py      CLI for maintain / status / settings / schedule (Task Scheduler, cron)
   storage/
     database.py        SQLite schema, migrations, queries, purge
   cli.py               `curator` command
@@ -68,7 +70,7 @@ SQLite (crate) + metadata providers + user identities/feedback
    ──► review UI ──► approved change set ──► spotify/sync (diff, apply, verify, log)
 ```
 
-## Database (schema v7)
+## Database (schema v8)
 
 | Table | Purpose |
 |---|---|
@@ -91,6 +93,7 @@ SQLite (crate) + metadata providers + user identities/feedback
 | `managed_playlists` | **user data** — playlists the app created: identity, Spotify id, status, last written URIs (to detect your manual edits) |
 | `playlist_snapshots` | **user data** — URIs of a managed playlist before/after each sync or rollback |
 | `sync_runs` | log of syncs with results and errors |
+| `maintenance_runs` | log of maintenance runs (manual / scheduled, preview / auto), what was applied and what was held |
 | `metadata_cache` | trimmed MusicBrainz / Last.fm responses keyed by provider + lookup key, with expiry. Descriptors are computed from it on demand |
 
 Tracks stay keyed by URI. Recordings are a layer on top, rebuilt from tracks + decisions, so

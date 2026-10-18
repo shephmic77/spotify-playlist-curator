@@ -11,7 +11,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from playlist_curator import cli_concepts, cli_drafts, cli_feedback, cli_sync
+from playlist_curator import cli_concepts, cli_drafts, cli_feedback, cli_maintain, cli_sync
 from playlist_curator.config import (
     READ_SCOPES,
     ConfigError,
@@ -590,6 +590,7 @@ def build_parser() -> argparse.ArgumentParser:
     cli_drafts.register(sub)
     cli_feedback.register(sub)
     cli_sync.register(sub)
+    cli_maintain.register(sub)
 
     sub.add_parser("ui", help="open the Streamlit interface").set_defaults(func=cmd_ui)
     return parser

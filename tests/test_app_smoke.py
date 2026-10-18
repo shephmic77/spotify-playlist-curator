@@ -66,6 +66,7 @@ def _fake_streamlit() -> types.ModuleType:
     st.text_input = lambda label, value="", **k: value
     st.text_area = lambda label, value="", **k: value
     st.selectbox = lambda label, options, index=0, **k: list(options)[index]
+    st.number_input = lambda label, min_value=None, max_value=None, value=None, **k: value
 
     def data_editor(data, **k):
         calls.append("data_editor")
