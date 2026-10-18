@@ -35,7 +35,9 @@ spotify/   API access only (auth, HTTP, retries). Returns raw JSON. No business 
 models.py  Pydantic models + parsers that normalize raw JSON. Pure functions.
 crate/     Import, dedup, inventory. Depends on spotify/ + storage/.
 metadata/  (Phase 3) Independent descriptor providers behind a common interface.
-curator/   (Phase 3+) Playlist identities, scoring, feedback, maintenance. Must NOT import spotify/.
+curator/   (Phase 3+) Playlist identities, scoring, feedback. Must NOT import spotify/.
+           Exception: curator/maintenance.py orchestrates a whole run (import → draft → sync),
+           so it calls crate/ and spotify/sync; scoring itself never touches Spotify.
 storage/   SQLite. Append-only migrations in MIGRATIONS.
 app.py     Streamlit UI. Reads/writes through crate/ and curator/, never raw SQL for logic.
 cli.py     Thin argparse layer.
@@ -98,4 +100,6 @@ curator auth login | import | inventory | playlists | duplicates ... | local-fil
 curator enrich | analyze | intents ... | propose | proposals ... | identities ...
 curator describe ... | draft | drafts [show|unassigned] | review | feedback | decisions
 curator stats [--evaluate] | ui | purge
+curator sync [--apply] | sync managed|history|release|local-files | rollback NAME
+curator maintain [--apply|--preview] | maintain status|settings|schedule
 ```

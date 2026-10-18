@@ -8,6 +8,26 @@ creates and maintains those playlists in your account without letting them drift
 It never adds music from outside your crate, never touches Liked Songs, and never modifies
 or deletes your original playlists.
 
+## How it works
+
+```
+Spotify (Liked Songs + your playlists)
+   │  import, dedup by recording
+   ▼
+Master Music Crate (SQLite)  ◄── tags from MusicBrainz + Last.fm
+   │  your descriptions + example songs → playlist definitions
+   ▼
+Rule-based scoring → draft playlists, each song with a reason
+   │  your keep / reject / essential feedback (and edits you make in Spotify)
+   ▼
+Preview → approve → private playlists in Spotify (snapshots, verify, rollback)
+   │
+   └─ scheduled maintenance keeps them current, within drift limits
+```
+
+No machine learning and no AI ever sees your library: matching is transparent tag and example
+scoring you can inspect with `curator drafts show "Name" --why`.
+
 ## Status
 
 | Phase | Scope | State |
@@ -21,9 +41,9 @@ or deletes your original playlists.
 | 6 | Create approved playlists in Spotify (preview, approve, write, verify, rollback) | **Done** |
 | 7 | Automatic maintenance and drift control | **Done** |
 
-See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
+All phases are complete. How each was built: [docs/project_plan.md](docs/project_plan.md).
 
-## What works today
+## Features
 
 - Secure login with OAuth Authorization Code + PKCE (no client secret). Write scopes only
   cover playlists; nothing can modify Liked Songs. `curator auth login --read-only` if you
@@ -42,7 +62,6 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
   near-matches (e.g. a remaster with a new ISRC) and local files that look like catalog songs are
   *suggested* for you to confirm. Live, remix, edit, acoustic, sped-up and similar versions are
   never treated as duplicates. Your decisions are kept permanently and override the ISRC rule.
-
 - **Tags from MusicBrainz and Last.fm** (Phase 3a, `curator enrich`): genre, era and mood tags
   for each song, fetched one song at a time within each service's rate limits and cached.
 - **A new collection, from scratch** (Phase 3b): describe what your old playlists were for
@@ -72,9 +91,9 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
   (`curator rollback "Name"`). Songs you add or remove in Spotify by hand are respected and
   count as keep / reject feedback. Local files go on a to-do list (`curator sync local-files`),
   because the API can't add them. Also available in the UI's *Spotify sync* tab.
-- **Automatic maintenance** (Phase 7): `curator maintain` imports your library, tags new (and
-  still-untagged) songs only, so it stays quick (backfilling is `curator enrich`'s job), rebuilds the drafts and compares them with Spotify. By default it only prepares a
-  preview; turn on `curator maintain settings --auto-apply on` to let small changes through on
+- **Automatic maintenance** (Phase 7): `curator maintain` imports your library, tags only new
+  and still-untagged songs (backfilling is `curator enrich`'s job), rebuilds the drafts and
+  compares them with Spotify. By default it only prepares a preview; turn on `curator maintain settings --auto-apply on` to let small changes through on
   their own. Drift guards hold a playlist for your approval when it's new, when it would change
   by more than 10 songs or 25% (configurable), or when the import was incomplete or your
   library shrank by more than 10%. `curator maintain schedule --install` runs it daily (or
@@ -91,10 +110,10 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
   contribute no songs. Copy their songs into a playlist you own if you want them in the crate.
 - **Development Mode:** the app owner (you) needs Spotify Premium; at most 5 users per app.
 - **No audio features, audio analysis, or recommendations** for new apps, and Spotify's
-  policy forbids feeding Spotify content to ML/AI models. Classification will rely on your own
-  descriptions, approved example songs, feedback, and independent metadata.
-- **Local files can be read but not added** to playlists through the API. Later phases produce
-  a manual to-do list for the desktop app instead.
+  policy forbids feeding Spotify content to ML/AI models. Classification relies on your own
+  descriptions, approved example songs, feedback, and independent metadata (tags).
+- **Local files can be read but not added** to playlists through the API. The app gives you a
+  to-do list for the desktop app instead (`curator sync local-files`).
 
 Details and sources: [docs/spotify_api.md](docs/spotify_api.md).
 
@@ -117,7 +136,7 @@ Details and sources: [docs/spotify_api.md](docs/spotify_api.md).
 Requires Python 3.12+.
 
 ```bash
-git clone <your repo> spotify-playlist-curator
+git clone https://github.com/shephmic77/spotify-playlist-curator.git
 cd spotify-playlist-curator
 python -m venv .venv
 # macOS/Linux:
@@ -159,6 +178,11 @@ curator review "Workout"    # k/r/e/u per song (borderline first; --all for ever
 curator feedback "Workout" reject "Island in the Sun"   # or keep / essential / uncertain / undo
 curator stats --evaluate    # acceptance, rejections, changes, holdout agreement
 curator ui                  # Streamlit interface at http://localhost:8501
+curator auth login          # once more, to allow creating/editing the app's own playlists
+curator sync                # preview what would be created in Spotify
+curator sync --apply        # create them (private); asks you to type yes
+curator maintain settings --auto-apply on    # optional: keep them current automatically
+curator maintain schedule --install          # optional: run daily (Windows Task Scheduler)
 ```
 
 If the browser can't reach the local callback (WSL, SSH, port in use), use
@@ -208,7 +232,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 189 tests; Spotify, MusicBrainz and Last.fm are mocked
+pytest            # 213 tests; Spotify, MusicBrainz and Last.fm are mocked
 ruff check . && ruff format --check .
 ```
 
