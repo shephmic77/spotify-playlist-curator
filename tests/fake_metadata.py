@@ -79,7 +79,8 @@ class FakeMetadataAPIs:
         self.lastfm_error: int | None = None
         self.cache_control: str | None = None
         self.raw_queries: list[str] = []
-        self.isrc_inc = {"artists", "tags", "genres"}
+        # Modelled on the live behaviour seen 2026-10-18: "genres" is rejected on ISRC lookups.
+        self.isrc_inc = {"artists", "tags"}
         self.malformed_isrcs: set[str] = set()
         self.forbidden: set[str] = set()
 
@@ -100,8 +101,8 @@ class FakeMetadataAPIs:
             kind, ident = parts[-2], parts[-1]
             # Like the real API: inc values are space-separated ("+" in the raw query). A
             # literal "+" (sent as %2B) or an unknown value is a 400 Bad Request.
-            allowed = self.isrc_inc if kind == "isrc" else {"tags", "genres"}
-            if any(v not in allowed for v in q.get("inc", "").split(" ")):
+            allowed = self.isrc_inc if kind == "isrc" else {"tags"}
+            if any(v not in allowed for v in q.get("inc", "").split(" ") if v):
                 return httpx.Response(400, json={"error": "Invalid inc"})
             if ident in self.malformed_isrcs:
                 return httpx.Response(400, json={"error": "Invalid isrc"})

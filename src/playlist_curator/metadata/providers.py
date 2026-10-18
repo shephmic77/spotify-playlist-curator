@@ -175,7 +175,9 @@ class _HTTPProvider:
                 continue
             if resp.status_code in (429, 500, 502, 503, 504) and attempt < self.max_retries:
                 retry_after = resp.headers.get("Retry-After")
-                wait = float(retry_after) if retry_after and retry_after.isdigit() else 2**attempt
+                wait = float(retry_after) if retry_after and retry_after.isdigit() else 0.0
+                # Back off at least 2s, 4s, 8s... even if the server says Retry-After: 0.
+                wait = max(wait, 2.0 ** (attempt + 1))
                 log.warning("%s returned %s; waiting %.0fs", self.name, resp.status_code, wait)
                 self.sleep(min(wait, 60))
                 continue
@@ -213,6 +215,18 @@ class MusicBrainzProvider(_HTTPProvider):
         kw.setdefault("min_interval", 1.1)  # MusicBrainz: ~1 request/second per client
         super().__init__(db, http, **kw)
         self._accepted_inc: dict[str, str] = {}
+        self._invalid_streak = 0
+        self._logged_rejections: set[str] = set()
+
+    # A run that can't get a single lookup accepted is a request-format problem, not bad data.
+    INVALID_STREAK_LIMIT = 15
+
+    def prepare_run(self) -> None:
+        """Forget earlier 'invalid' results: they're cheap to retry and were usually caused
+        by a request-format problem (fixed since), not by bad ISRCs."""
+        self.cache.db.conn.execute(
+            "DELETE FROM metadata_cache WHERE provider=? AND status='invalid'", (self.name,)
+        )
 
     def _fetch(self, key: str, path: str, incs: list[str], offline: bool) -> tuple[str, Any] | None:
         """GET a MusicBrainz resource, trying each ``inc`` variant until one is accepted.
@@ -229,16 +243,27 @@ class MusicBrainzProvider(_HTTPProvider):
         ordered = incs[incs.index(start) :] if start in incs else incs
         resp = None
         for inc in ordered:
-            resp = self._get(f"{MB_BASE}{path}", {"inc": inc, "fmt": "json"})
+            params = {"inc": inc, "fmt": "json"} if inc else {"fmt": "json"}
+            resp = self._get(f"{MB_BASE}{path}", params)
             if resp.status_code != 400:
                 if resp.status_code in (200, 404):  # the inc value itself was accepted
                     self._accepted_inc[incs[0]] = inc
                 break
+            if inc not in self._logged_rejections:
+                self._logged_rejections.add(inc)
+                log.warning("MusicBrainz rejected inc=%r: %s", inc, resp.text[:200])
         assert resp is not None
         if resp.status_code == 400:
+            self._invalid_streak += 1
+            if self._invalid_streak >= self.INVALID_STREAK_LIMIT:
+                raise ProviderFatal(
+                    f"MusicBrainz rejected the last {self._invalid_streak} lookups as bad "
+                    f"requests. Its message: {resp.text[:200]!r}. Please report this."
+                )
             # Every variant rejected: the identifier itself is malformed. Skip it for a while.
             self.cache.put(key, "invalid", None, self.not_found_ttl)
             return "invalid", None
+        self._invalid_streak = 0
         if resp.status_code == 404:
             self.cache.put(key, "not_found", None, self.not_found_ttl)
             return "not_found", None
@@ -289,7 +314,9 @@ class MusicBrainzProvider(_HTTPProvider):
         res = self._fetch(
             f"isrc:{q.isrc.upper()}",
             f"/isrc/{q.isrc.upper()}",
-            ["artists tags genres", "artist-credits tags genres", "tags genres"],
+            # "genres" is left out: it's not accepted on every endpoint, and MusicBrainz
+            # returns genres among the tags anyway.
+            ["artists tags", "artist-credits tags", "tags", ""],
             offline,
         )
         if res is None:
@@ -320,7 +347,7 @@ class MusicBrainzProvider(_HTTPProvider):
         artist_ids = chosen[0].get("artist_ids") or []
         if artist_ids:
             ares = self._fetch(
-                f"artist:{artist_ids[0]}", f"/artist/{artist_ids[0]}", ["tags genres"], offline
+                f"artist:{artist_ids[0]}", f"/artist/{artist_ids[0]}", ["tags", ""], offline
             )
             if ares and ares[0] == "ok" and ares[1] and ares[1]["tags"]:
                 outcome.tags["mb_artist"] = weights_from_counts(ares[1]["tags"], artist=q.artist)

@@ -138,6 +138,8 @@ def enrich(
     for p in providers:
         if refresh:
             db.conn.execute("DELETE FROM metadata_cache WHERE provider=?", (p.name,))
+        if hasattr(p, "prepare_run"):
+            p.prepare_run()
         stats = EnrichStats(p.name)
         todo = len(queries)
         say(f"{p.name}: {todo} recordings")

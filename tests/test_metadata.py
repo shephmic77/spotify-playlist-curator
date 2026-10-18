@@ -259,7 +259,7 @@ def test_musicbrainz_inc_is_space_separated_in_the_query(db, apis):
     mb(db, apis).lookup(MIDNIGHT)
     # httpx turns spaces into "+", which MusicBrainz reads as separators. A literal "+"
     # would become %2B and be rejected (the bug that stopped the first real run).
-    assert apis.raw_queries[0].startswith("inc=artists+tags+genres")
+    assert apis.raw_queries[0].startswith("inc=artists+tags&")
     assert "%2B" not in apis.raw_queries[0]
 
 
@@ -308,9 +308,43 @@ def test_bad_lastfm_key_is_fatal(db, apis):
 
 def test_falls_back_when_an_inc_value_is_rejected_and_remembers(fake, client, db, apis):
     imported(client, db)
-    apis.isrc_inc = {"artist-credits", "tags", "genres"}  # if "artists" weren't accepted
+    apis.isrc_inc = {"artist-credits", "tags"}  # if "artists" weren't accepted
     (s,) = enrich(db, [mb(db, apis)])
     assert s.found == 3
     isrc_queries = [q for q in apis.raw_queries if "artist" in q.split("&")[0]]
     rejected = [q for q in isrc_queries if q.startswith("inc=artists+")]
     assert len(rejected) == 1  # tried once, then the working variant is reused
+
+
+def test_last_resort_is_a_lookup_without_inc(fake, client, db, apis):
+    imported(client, db)
+    apis.isrc_inc = set()  # every inc value rejected; plain lookup still works
+    (s,) = enrich(db, [mb(db, apis)])
+    assert s.found == 3 and s.stopped_early is None
+
+
+def test_every_lookup_rejected_stops_early_with_the_server_message(db, apis, monkeypatch):
+    p = mb(db, apis)
+    monkeypatch.setattr(p, "INVALID_STREAK_LIMIT", 3)
+    for i in range(3):
+        apis.malformed_isrcs.add(f"XX000000000{i}")
+    with pytest.raises(ProviderFatal, match="Invalid isrc"):
+        for i in range(3):
+            p.lookup(RecordingQuery(f"r{i}", "T", "A", f"XX000000000{i}"))
+
+
+def test_previous_invalid_results_are_retried_next_run(fake, client, db, apis):
+    imported(client, db)
+    apis.malformed_isrcs.add("FRZID1100001")
+    enrich(db, [mb(db, apis)])
+    apis.malformed_isrcs.clear()
+    (s,) = enrich(db, [mb(db, apis)])
+    assert s.found == 3  # Midnight City was retried, not skipped for 30 days
+
+
+def test_503_with_retry_after_zero_still_backs_off(db, apis):
+    sleeps: list[float] = []
+    p = mb(db, apis, sleeps)
+    apis.injected.append(httpx.Response(503, headers={"Retry-After": "0"}))
+    p.lookup(MIDNIGHT)
+    assert sleeps and sleeps[0] >= 2
