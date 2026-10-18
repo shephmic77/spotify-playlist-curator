@@ -20,7 +20,6 @@ or deletes your original playlists.
 | 5 | Feedback: keep / reject / essential per song, learning per playlist, metrics | **Done** |
 | 6 | Create approved playlists in Spotify (preview, approve, write, verify, rollback) | **Done** |
 | 7 | Automatic maintenance and drift control | **Done** |
-| 8 | Refinement | Next |
 
 See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
 

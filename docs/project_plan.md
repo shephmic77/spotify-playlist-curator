@@ -112,10 +112,6 @@ Original plan: Detect crate changes (already recorded per import), score only af
 produce change set, apply automatically only if the owner enabled it. Optional scheduling via
 OS scheduler (cron / Task Scheduler) calling `scripts/run_sync.py`; no background service.
 
-## Phase 8 — Refinement
-
-Accuracy, API efficiency, UX, docs of known limitations.
-
 ## Evaluation metrics (from Phase 4)
 
 Acceptance and rejection rates of suggestions, % crate assigned (secondary), unassigned count,
