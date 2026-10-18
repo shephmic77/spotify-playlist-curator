@@ -72,8 +72,8 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
   (`curator rollback "Name"`). Songs you add or remove in Spotify by hand are respected and
   count as keep / reject feedback. Local files go on a to-do list (`curator sync local-files`),
   because the API can't add them. Also available in the UI's *Spotify sync* tab.
-- **Automatic maintenance** (Phase 7): `curator maintain` imports your library, tags only new
-  songs, rebuilds the drafts and compares them with Spotify. By default it only prepares a
+- **Automatic maintenance** (Phase 7): `curator maintain` imports your library, tags new (and
+  still-untagged) songs only, so it stays quick (backfilling is `curator enrich`'s job), rebuilds the drafts and compares them with Spotify. By default it only prepares a
   preview; turn on `curator maintain settings --auto-apply on` to let small changes through on
   their own. Drift guards hold a playlist for your approval when it's new, when it would change
   by more than 10 songs or 25% (configurable), or when the import was incomplete or your

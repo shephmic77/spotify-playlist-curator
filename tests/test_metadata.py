@@ -323,14 +323,17 @@ def test_last_resort_is_a_lookup_without_inc(fake, client, db, apis):
     assert s.found == 3 and s.stopped_early is None
 
 
-def test_every_lookup_rejected_stops_early_with_the_server_message(db, apis, monkeypatch):
+def test_malformed_isrcs_cost_one_request_and_dont_stop_the_run(db, apis, monkeypatch):
     p = mb(db, apis)
     monkeypatch.setattr(p, "INVALID_STREAK_LIMIT", 3)
-    for i in range(3):
+    for i in range(5):
         apis.malformed_isrcs.add(f"XX000000000{i}")
-    with pytest.raises(ProviderFatal, match="Invalid isrc"):
-        for i in range(3):
-            p.lookup(RecordingQuery(f"r{i}", "T", "A", f"XX000000000{i}"))
+    for i in range(5):
+        out = p.lookup(RecordingQuery(f"r{i}", "T", "A", f"XX000000000{i}"))
+        assert out is not None and not out.found
+    assert p.requests == 5  # no retries with other inc variants
+    p.lookup(RecordingQuery("r0", "T", "A", "XX0000000000"))
+    assert p.requests == 5  # remembered
 
 
 def test_previous_invalid_results_are_retried_next_run(fake, client, db, apis):

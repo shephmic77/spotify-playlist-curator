@@ -321,7 +321,7 @@ MIGRATIONS: list[str] = [
         trigger      TEXT NOT NULL,
         -- preview (nothing written) | auto (allowed changes written)
         mode         TEXT NOT NULL,
-        -- running | ok | held (some playlists need your approval) | partial | failed
+        -- running | ok | held (some playlists need your approval) | partial | failed | stopped
         status       TEXT NOT NULL,
         summary_json TEXT,
         errors_json  TEXT

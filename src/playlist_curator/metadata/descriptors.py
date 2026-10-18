@@ -129,16 +129,22 @@ def enrich(
     limit: int | None = None,
     refresh: bool = False,
     progress: Callable[[str], None] | None = None,
+    only: set[str] | None = None,
+    retry_invalid: bool = True,
 ) -> list[EnrichStats]:
+    """Fetch tags. ``only`` limits it to these recording ids (maintenance: new songs only);
+    ``retry_invalid=False`` keeps earlier "invalid identifier" results instead of retrying."""
     say = progress or (lambda _m: None)
     queries = build_queries(db)
+    if only is not None:
+        queries = [q for q in queries if q.recording_id in only]
     if limit is not None:
         queries = queries[:limit]
     results = []
     for p in providers:
         if refresh:
             db.conn.execute("DELETE FROM metadata_cache WHERE provider=?", (p.name,))
-        if hasattr(p, "prepare_run"):
+        if retry_invalid and hasattr(p, "prepare_run"):
             p.prepare_run()
         stats = EnrichStats(p.name)
         todo = len(queries)

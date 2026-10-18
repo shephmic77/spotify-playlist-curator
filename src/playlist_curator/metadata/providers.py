@@ -178,7 +178,9 @@ class _HTTPProvider:
                 wait = float(retry_after) if retry_after and retry_after.isdigit() else 0.0
                 # Back off at least 2s, 4s, 8s... even if the server says Retry-After: 0.
                 wait = max(wait, 2.0 ** (attempt + 1))
-                log.warning("%s returned %s; waiting %.0fs", self.name, resp.status_code, wait)
+                # Busy servers are routine (MusicBrainz often answers 503); only giving up
+                # is worth a warning.
+                log.debug("%s returned %s; waiting %.0fs", self.name, resp.status_code, wait)
                 self.sleep(min(wait, 60))
                 continue
             return resp
@@ -249,6 +251,11 @@ class MusicBrainzProvider(_HTTPProvider):
                 if resp.status_code in (200, 404):  # the inc value itself was accepted
                     self._accepted_inc[incs[0]] = inc
                 break
+            if "invalid isrc" in resp.text.lower():
+                # The identifier is malformed (Spotify has a few bad ISRCs); other ``inc``
+                # variants won't help, and it says nothing about our request format.
+                self.cache.put(key, "invalid", None, self.not_found_ttl)
+                return "invalid", None
             if inc not in self._logged_rejections:
                 self._logged_rejections.add(inc)
                 log.warning("MusicBrainz rejected inc=%r: %s", inc, resp.text[:200])

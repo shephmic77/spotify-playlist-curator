@@ -176,3 +176,40 @@ def test_cli_maintain_status_settings_schedule(env, fake, client, capsys, monkey
     monkeypatch.setattr("sys.platform", "linux")
     assert cli.main(["maintain", "schedule", "--at", "7:05"]) == 0
     assert "5 7 * * *" in capsys.readouterr().out
+
+
+@pytest.mark.usefixtures("setup")
+def test_only_new_or_untagged_songs_are_tagged(fake, client, db):
+    seen = []
+
+    class Recorder:
+        name = "recorder"
+        requests = 0
+
+        def lookup(self, q):
+            seen.append(q.recording_id)
+            return None
+
+    first_sync(db, client)
+    run(db, client, providers=[Recorder()])
+    # no song has cached tags in this test library, so all count as untagged; none are "new"
+    assert set(seen) == {r[0] for r in db.conn.execute("SELECT recording_id FROM recordings")}
+    seen.clear()
+    mt.save_settings(db, enrich=False)
+    run(db, client, providers=[Recorder()])
+    assert seen == []
+
+
+@pytest.mark.usefixtures("setup")
+def test_stopping_a_run_is_recorded(fake, client, db, monkeypatch):
+    def boom(*a, **k):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(mt, "build_drafts", boom)
+    with pytest.raises(KeyboardInterrupt):
+        run(db, client)
+    assert mt.last_runs(db)[0]["status"] == "stopped"
+    db.conn.execute("UPDATE maintenance_runs SET status='running'")  # as if the PC shut down
+    monkeypatch.undo()
+    run(db, client)
+    assert [r["status"] for r in mt.last_runs(db)][1] == "stopped"

@@ -38,7 +38,7 @@ from typing import Any
 
 from playlist_curator.crate.importer import import_library
 from playlist_curator.curator.scoring import build_drafts
-from playlist_curator.metadata.descriptors import Descriptors, coverage, enrich
+from playlist_curator.metadata.descriptors import Descriptors, coverage, enrich, load_descriptors
 from playlist_curator.spotify import sync
 from playlist_curator.spotify.client import SpotifyClient
 from playlist_curator.storage.database import Database, utcnow
@@ -92,7 +92,7 @@ class MaintenanceResult:
     run_id: int
     trigger: str
     mode: str  # preview | auto
-    status: str  # ok | held | partial | failed
+    status: str  # ok | held | partial | failed | stopped
     import_status: str | None = None
     new_songs: int = 0
     removed_songs: int = 0
@@ -110,6 +110,10 @@ class MaintenanceResult:
 
 def _count_recordings(db: Database) -> int:
     return int(db.conn.execute("SELECT COUNT(*) FROM recordings").fetchone()[0])
+
+
+def _recording_ids(db: Database) -> set[str]:
+    return {r[0] for r in db.conn.execute("SELECT recording_id FROM recordings")}
 
 
 def _change(pp: sync.PlaylistPlan) -> dict[str, Any]:
@@ -154,6 +158,11 @@ def run(
     cfg = settings or load_settings(db)
     do_apply = cfg.auto_apply if apply is None else apply
     mode = "auto" if do_apply else "preview"
+    # A run that was cut off (closed window, PC shut down) never got to record its end.
+    db.conn.execute(
+        "UPDATE maintenance_runs SET status='stopped', finished_at=? WHERE status='running'",
+        (utcnow(),),
+    )
     cur = db.conn.execute(
         "INSERT INTO maintenance_runs (started_at, trigger, mode, status) VALUES (?,?,?,'running')",
         (utcnow(), trigger, mode),
@@ -161,9 +170,13 @@ def run(
     res = MaintenanceResult(int(cur.lastrowid or 0), trigger, mode, "failed")
     try:
         _run(db, client, providers or [], cfg, do_apply, res, say, descriptors)
-    except Exception as exc:  # recorded, then re-raised so callers see it
-        res.status = "failed"
-        res.errors.append(f"{type(exc).__name__}: {exc}")
+    except BaseException as exc:  # recorded (even Ctrl+C), then re-raised so callers see it
+        res.status = "stopped" if isinstance(exc, KeyboardInterrupt) else "failed"
+        res.errors.append(
+            "stopped by you"
+            if isinstance(exc, KeyboardInterrupt)
+            else f"{type(exc).__name__}: {exc}"
+        )
         _finish(db, res)
         raise
     _finish(db, res)
@@ -181,6 +194,7 @@ def _run(
     descriptors: dict[str, Descriptors] | None,
 ) -> None:
     res.recordings_before = _count_recordings(db)
+    known = _recording_ids(db)
 
     say("1/4 Importing your library ...")
     imp = import_library(client, db, progress=lambda _m: None)
@@ -204,17 +218,24 @@ def _run(
                 "nothing applied automatically"
             )
 
-    if cfg.enrich and providers:
-        say("2/4 Tagging new songs ...")
+    # New songs, plus any song with no tags at all (e.g. imported by a run you stopped).
+    # Songs looked up before and not found are cache hits, so this stays quick.
+    untagged = {rid for rid, d in load_descriptors(db).items() if not d.by_source}
+    new_ids = (_recording_ids(db) - known) | untagged
+    if cfg.enrich and providers and new_ids:
+        # Only the songs that are new this run. Backfilling old songs (e.g. a MusicBrainz
+        # pass you stopped early) is `curator enrich`'s job; at ~1 request/second it can take
+        # an hour, which a scheduled run shouldn't.
+        say(f"2/4 Tagging {len(new_ids)} new or untagged song(s) ...")
         before = _tagged(db)
-        stats = enrich(db, providers, progress=lambda _m: None)
+        stats = enrich(db, providers, only=new_ids, retry_invalid=False, progress=lambda _m: None)
         res.tagged_new = max(0, _tagged(db) - before)
         for st in stats:
             if st.stopped_early:
                 res.errors.append(f"{st.provider}: stopped early: {st.stopped_early}")
         say(f"    {res.tagged_new} newly tagged")
     else:
-        say("2/4 Tagging skipped")
+        say("2/4 Tagging: " + ("no new songs" if not new_ids else "skipped"))
 
     say("3/4 Rebuilding drafts ...")
     draft = build_drafts(db, descriptors=descriptors)
