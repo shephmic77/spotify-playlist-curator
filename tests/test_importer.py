@@ -24,14 +24,15 @@ def test_full_import_builds_crate_with_provenance(fake, client, db, small_pages)
     assert c.skipped == {"unavailable": 2, "episode": 1}
 
     s = summarize(db)
-    # midnight, tom_album, tom_comp, tom_mtv, africa, nightcall, clair, local_remix, local_bare
-    assert s.unique_tracks == 9
-    assert s.local_tracks == 2
-    assert s.catalog_tracks == 7
+    # midnight, tom_album, tom_comp, tom_mtv, africa, africa_rm, nightcall, clair,
+    # + 3 local files
+    assert s.unique_tracks == 11
+    assert s.local_tracks == 3
+    assert s.catalog_tracks == 8
     assert s.in_liked == 3
     assert s.liked_only == 1  # Clair de lune is liked but in no playlist
     assert s.in_both == 2  # Midnight City, Take On Me (album)
-    assert s.playlists_only == 6
+    assert s.playlists_only == 8
     assert s.repeated_within_playlist == 2  # local_remix twice, africa twice
     assert s.isrc_groups_with_multiple_uris == 1  # album + compilation Take On Me
     assert s.tracks_in_isrc_groups == 2
@@ -64,7 +65,11 @@ def test_live_version_is_not_merged_with_studio_version(fake, client, db):
 def test_local_entries_are_kept_with_source(fake, client, db):
     run(client, db)
     local = [r for r in track_table(db) if r["local_file"]]
-    assert {r["name"] for r in local} == {"Song Title: Night Remix", "untitled bootleg"}
+    assert {r["name"] for r in local} == {
+        "Song Title: Night Remix",
+        "untitled bootleg",
+        "Kavinsky - Nightcall (Official Video)",
+    }
     assert all(r["playlists"] == ["Local Files"] for r in local)
     t = db.get_track("spotify:local:Some+Artist:YouTube+Rips:Song+Title%3A+Night+Remix:215")
     assert t is not None and t.spotify_id is None and t.is_local
@@ -88,7 +93,7 @@ def test_unchanged_snapshots_are_not_refetched(fake, client, db):
     assert fake.count("/playlists/") == first  # no playlist item calls on second run
     assert result.counts.playlists_unchanged == 6
     assert result.counts.new_tracks == 0 and result.counts.removed_tracks == 0
-    assert summarize(db).unique_tracks == 9
+    assert summarize(db).unique_tracks == 11
 
 
 def test_force_refetches_everything(fake, client, db):
@@ -131,7 +136,7 @@ def test_deleted_playlist_is_forgotten_locally(fake, client, db):
     result = run(client, db)
     assert "pl_local" not in {r["id"] for r in playlist_table(db)}
     assert summarize(db).local_tracks == 0
-    assert result.counts.removed_tracks == 2
+    assert result.counts.removed_tracks == 3
 
 
 def test_server_error_on_one_playlist_is_partial_and_keeps_old_data(fake, client, db):

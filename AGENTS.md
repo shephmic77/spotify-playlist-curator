@@ -62,6 +62,11 @@ Re-verify against docs/spotify_api.md links before adding endpoints.
 - Any change to API usage needs a test asserting the request shape.
 - Schema changes: append a new string to `MIGRATIONS`; never edit an applied migration.
 - Importer: fetch everything first, then write in one transaction.
+- Dedup: only identical ISRC merges automatically. Everything else is a suggestion. User
+  decisions (`dedup_decisions`) are never derived or dropped; `recordings`,
+  `recording_members`, `dedup_suggestions` are derived and rebuilt after every import/decision.
+- Later phases reference **recordings** (`recording_id`), not URIs. Write the recording's
+  `primary_uri` to Spotify.
 - Log with `logging.getLogger(__name__)`; never log tokens or full Authorization headers.
 - Update `docs/` and the Status table in README when a phase milestone lands.
 
@@ -71,5 +76,5 @@ Re-verify against docs/spotify_api.md links before adding endpoints.
 pip install -e ".[ui,dev]"
 pytest
 ruff check . && ruff format --check .
-curator auth login | import | inventory | playlists | ui | purge
+curator auth login | import | inventory | playlists | duplicates ... | local-files | ui | purge
 ```

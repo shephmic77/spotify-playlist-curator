@@ -2,9 +2,9 @@
 
 Launch with ``curator ui`` (or ``streamlit run src/playlist_curator/app.py``).
 
-Phase 1 provides the Library view: what is in the crate, where each song came from, and
-which playlists could not be read. Later phases add Playlist Collection, Playlist Details
-and Spotify Sync views on top of the same database.
+Current views: Library (crate overview and songs), Duplicates (review suggested matches,
+inspect and split merged recordings), Local files, Source playlists, Import history.
+Later phases add Playlist Collection, Playlist Details and Spotify Sync.
 """
 
 from __future__ import annotations
@@ -15,8 +15,17 @@ import pandas as pd
 import streamlit as st
 
 from playlist_curator.config import ConfigError, load_settings
+from playlist_curator.crate import deduplication as dedup
 from playlist_curator.crate.importer import import_library
-from playlist_curator.crate.inventory import playlist_table, summarize, track_table
+from playlist_curator.crate.inventory import (
+    decisions_table,
+    duplicate_groups,
+    local_files_table,
+    pending_suggestions,
+    playlist_table,
+    summarize,
+    track_table,
+)
 from playlist_curator.spotify.auth import AuthError, TokenManager, TokenStore
 from playlist_curator.spotify.client import SpotifyAPIError, SpotifyClient
 from playlist_curator.storage.database import Database
@@ -39,6 +48,30 @@ def run_import(force: bool) -> None:
         st.error(str(exc))
 
 
+def act(fn, *args) -> None:
+    """Run a write against a fresh connection, then refresh the page."""
+    with Database(settings.db_path) as db:
+        fn(db, *args)
+    st.rerun()
+
+
+def describe(t: dict) -> str:
+    if t.get("local_file"):
+        where = "local file"
+    else:
+        kind = f" · {t['album_type']}" if t.get("album_type") else ""
+        where = f"{t.get('album') or '?'}{kind} · {t.get('release_date') or '?'}"
+    length = ""
+    if t.get("duration_s"):
+        m, s = divmod(t["duration_s"], 60)
+        length = f" · {m}:{s:02d}"
+    isrc = f" · ISRC {t['isrc']}" if t.get("isrc") else ""
+    return (
+        f"**{t.get('name')}** — {t.get('artists') or '?'}  \n"
+        f"{where}{length}{isrc} · in {t.get('times_in_sources', 0)} source(s)"
+    )
+
+
 with st.sidebar:
     st.header("Playlist Curator")
     logged_in = TokenStore(settings.token_path).load() is not None
@@ -56,29 +89,34 @@ if not settings.db_path.exists():
     st.stop()
 
 with Database(settings.db_path) as db:
+    dedup.ensure_current(db)
     s = summarize(db)
     tracks = pd.DataFrame(track_table(db))
     playlists = pd.DataFrame(playlist_table(db))
+    suggestions = pending_suggestions(db)
+    groups = duplicate_groups(db)
+    decisions = decisions_table(db)
+    local_files = pd.DataFrame(local_files_table(db))
     runs = db.last_runs(20)
 
 st.title("Library")
 
 c = st.columns(5)
-c[0].metric("Unique songs", s.unique_tracks)
-c[1].metric("In Liked Songs", s.in_liked)
-c[2].metric("In playlists", s.in_playlists)
-c[3].metric("In both", s.in_both)
-c[4].metric("Local files", s.local_tracks)
+c[0].metric("Unique songs", s.unique_recordings, help="Copies of the same recording count once")
+c[1].metric("In Liked Songs", s.rec_in_liked)
+c[2].metric("In playlists", s.rec_in_playlists)
+c[3].metric("In both", s.rec_in_both)
+c[4].metric("Local files", s.local_tracks, help=f"{s.local_matched} matched to a catalog song")
 
 c = st.columns(5)
-c[0].metric("Only in playlists", s.playlists_only, help="Songs you kept but never liked")
-c[1].metric("Only liked", s.liked_only)
-c[2].metric("Repeated in a playlist", s.repeated_within_playlist)
-c[3].metric(
-    "Possible duplicates",
-    s.isrc_groups_with_multiple_uris,
-    help="Groups of different Spotify URIs sharing an ISRC. Not merged yet (Phase 2).",
+c[0].metric("Only in playlists", s.rec_playlists_only, help="Songs you kept but never liked")
+c[1].metric("Only liked", s.rec_liked_only)
+c[2].metric(
+    "Duplicate copies merged",
+    s.duplicate_uris_merged,
+    help=f"{s.merged_groups} recordings had more than one Spotify copy",
 )
+c[3].metric("Matches to review", s.pending_title_suggestions + s.pending_local_suggestions)
 c[4].metric(
     "Playlists unreadable",
     s.playlists_contents_unavailable,
@@ -86,16 +124,25 @@ c[4].metric(
 )
 st.caption("Unassigned songs will appear here once playlist assignment exists (Phase 4).")
 
-tab_tracks, tab_playlists, tab_runs = st.tabs(["Songs", "Source playlists", "Import history"])
+tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = st.tabs(
+    [
+        "Songs",
+        f"Duplicates ({len(suggestions)} to review)",
+        "Local files",
+        "Source playlists",
+        "Import history",
+    ]
+)
 
-with tab_tracks:
+with tab_songs:
     if tracks.empty:
         st.write("No songs imported.")
     else:
         f1, f2, f3 = st.columns([2, 1, 1])
         query = f1.text_input("Search title, artist or album")
         source = f2.selectbox(
-            "Source", ["All", "Liked", "Not liked", "Local files", "In 3+ playlists"]
+            "Show",
+            ["All", "Liked", "Not liked", "Local files", "In 3+ playlists", "Has duplicates"],
         )
         names = sorted(n for n in playlists["name"]) if not playlists.empty else []
         in_playlist = f3.selectbox("In playlist", ["Any", *names])
@@ -115,13 +162,68 @@ with tab_tracks:
             view = view[view["local_file"]]
         elif source == "In 3+ playlists":
             view = view[view["n_playlists"] >= 3]
+        elif source == "Has duplicates":
+            view = view[view["copies_of_recording"] > 1]
         if in_playlist != "Any":
             view = view[view["playlists"].apply(lambda names: in_playlist in names)]
-        st.caption(f"{len(view)} of {len(tracks)} songs")
-        st.dataframe(view, use_container_width=True, hide_index=True)
+        st.caption(f"{len(view)} of {len(tracks)} Spotify copies / local entries")
+        st.dataframe(view, width="stretch", hide_index=True)
+
+with tab_dups:
+    st.subheader("Waiting for your decision")
+    st.caption(
+        "Same ISRC is merged automatically. These have different ISRCs (or are local files), "
+        "so you decide. Different versions (live, remix, edit, ...) are never suggested."
+    )
+    if not suggestions:
+        st.success("Nothing to review.")
+    for item in suggestions:
+        with st.container(border=True):
+            label = "Local file match" if item["kind"] == "local_match" else "Same song?"
+            st.markdown(f"**{label}** · {item['strength']} · `{item['id']}`")
+            st.caption(item["reason"])
+            a, b = st.columns(2)
+            a.markdown(describe(item["a"]))
+            b.markdown(describe(item["b"]))
+            b1, b2, _ = st.columns([1, 1, 4])
+            if b1.button("Same recording", key=f"same-{item['id']}", type="primary"):
+                act(dedup.decide, item["a"]["uri"], item["b"]["uri"], "same")
+            if b2.button("Different", key=f"diff-{item['id']}"):
+                act(dedup.decide, item["a"]["uri"], item["b"]["uri"], "different")
+
+    st.subheader(f"Merged recordings ({len(groups)})")
+    st.caption("★ marks the copy used when writing playlists.")
+    for g in groups:
+        with st.expander(f"{g['title']} — {g['artists']}  ({len(g['members'])} copies)"):
+            for m in g["members"]:
+                left, right = st.columns([5, 1])
+                star = "★ " if m["primary"] else ""
+                left.markdown(f"{star}{describe(m)}  \nGrouped by: {m['evidence']}")
+                if right.button("Split out", key=f"split-{m['uri']}"):
+                    act(dedup.split_out, m["uri"])
+
+    if decisions:
+        st.subheader("Your decisions")
+        for d in decisions:
+            left, right = st.columns([5, 1])
+            left.markdown(
+                f"`{d['id']}` **{d['decision']}** · {d['a'].get('name')} ↔ {d['b'].get('name')}"
+            )
+            if right.button("Undo", key=f"undo-{d['id']}"):
+                act(dedup.undo_decision, d["pair_key"])
+
+with tab_local:
+    st.caption(
+        "Local files can't be added to playlists through Spotify's API. Matching them to "
+        "catalog songs lets later phases tell you where each one belongs."
+    )
+    if local_files.empty:
+        st.write("No local files found in your playlists.")
+    else:
+        st.dataframe(local_files, width="stretch", hide_index=True)
 
 with tab_playlists:
-    st.dataframe(playlists, use_container_width=True, hide_index=True)
+    st.dataframe(playlists, width="stretch", hide_index=True)
 
 with tab_runs:
     for r in runs:

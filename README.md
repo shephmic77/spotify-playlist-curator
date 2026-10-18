@@ -13,7 +13,7 @@ or deletes your original playlists.
 | Phase | Scope | State |
 |---|---|---|
 | 1 | Spotify connection, Liked Songs + playlist import, inventory | **Done** |
-| 2 | Master Music Crate: recording-level dedup, provenance, local files | Next |
+| 2 | Master Music Crate: recording-level dedup, provenance, local files | **Done** |
 | 3 | Playlist understanding and concept proposals | Planned (policy decision needed, see below) |
 | 4 | Multi-label scoring and draft playlists | Planned |
 | 5 | Feedback and personalization | Planned |
@@ -36,6 +36,10 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
 - An inventory report (CLI and Streamlit) showing liked vs. playlist-only songs, overlap,
   local files, repeated entries, possible duplicate recordings, and unreadable playlists.
 - `curator purge` deletes all local data and tokens (Spotify's terms require this on disconnect).
+- **Duplicate recordings are merged** (Phase 2). Copies with the same ISRC count as one song;
+  near-matches (e.g. a remaster with a new ISRC) and local files that look like catalog songs are
+  *suggested* for you to confirm. Live, remix, edit, acoustic, sped-up and similar versions are
+  never treated as duplicates. Your decisions are kept permanently and override the ISRC rule.
 
 ## Important limitations (from Spotify, not this app)
 
@@ -96,7 +100,8 @@ curator auth login          # opens your browser; approve, then return to the te
 curator import              # reads Liked Songs + playlists into data/curator.sqlite3
 curator inventory           # summary of your crate
 curator playlists           # which playlists were read, and which Spotify withheld
-curator ui                  # Streamlit Library view at http://localhost:8501
+curator duplicates review   # confirm or reject suggested duplicate matches
+curator ui                  # Streamlit interface at http://localhost:8501
 ```
 
 If the browser can't reach the local callback (WSL, SSH, port in use), use
@@ -109,6 +114,11 @@ Re-run `curator import` any time. Only changed playlists are re-read; use `--for
 ```bash
 curator auth status         # who is logged in, granted scopes, token expiry
 curator auth logout         # delete saved tokens (also remove access at spotify.com/account/apps)
+curator duplicates list     # recordings with several copies (* = copy used for playlists)
+curator duplicates same|different <id>   # decide one suggestion by id
+curator duplicates split <uri>           # pull one copy out of its group
+curator duplicates decisions | undo <id> # see / reverse your decisions
+curator local-files         # local files, where they are, what they match
 curator purge               # delete local database + tokens; does not touch Spotify
 curator -v import           # debug logging
 ```
@@ -124,7 +134,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 60 tests; Spotify is mocked, no network or credentials needed
+pytest            # 90 tests; Spotify is mocked, no network or credentials needed
 ruff check . && ruff format --check .
 ```
 

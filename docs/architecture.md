@@ -21,18 +21,19 @@ src/playlist_curator/
     client.py          HTTP client: retries, 429, pagination, endpoint methods
   crate/
     importer.py        Fetch Liked Songs + playlists, then write in one transaction
+    deduplication.py   Group URIs into recordings; suggestions; user decisions
     inventory.py       Read-only summaries and tables for CLI/UI
   storage/
     database.py        SQLite schema, migrations, queries, purge
   cli.py               `curator` command
-  app.py               Streamlit UI (Library view)
+  app.py               Streamlit UI (Library, Duplicates, Local files)
 tests/
   fake_spotify.py      httpx.MockTransport fake of the API
   fixtures/library.json
 ```
 
 Planned modules (not yet present, created when their phase starts so nothing is a stub):
-`crate/deduplication.py` (2), `metadata/providers.py`, `metadata/matching.py` (3),
+`metadata/providers.py`, `metadata/matching.py` (3),
 `curator/playlist_discovery.py`, `classification.py`, `scoring.py` (3–4), `feedback.py` (5),
 `spotify/sync.py` (6), `curator/maintenance.py`, `scripts/run_sync.py` (7).
 
@@ -52,7 +53,7 @@ SQLite (crate) + metadata providers + user identities/feedback
    ──► review UI ──► approved change set ──► spotify/sync (diff, apply, verify, log)
 ```
 
-## Database (schema v1)
+## Database (schema v2)
 
 | Table | Purpose |
 |---|---|
@@ -61,9 +62,33 @@ SQLite (crate) + metadata providers + user identities/feedback
 | `playlists` | every playlist in your library; `contents_status` = fetched / unavailable / error |
 | `source_entries` | each occurrence of a track in Liked Songs or a playlist (position, added_at, added_by) |
 | `import_runs` | log of imports with counts and errors |
+| `recordings` | *derived* — one row per recording: id, primary URI used for writing, title |
+| `recording_members` | *derived* — which URIs belong to which recording, and why (`self`, `isrc`, `accepted`) |
+| `dedup_suggestions` | *derived* — pending possible matches (`title_match`, `local_match`) |
+| `dedup_decisions` | **user data** — `same` / `different` per URI pair; never rebuilt, survives tracks leaving |
 
-Phase 1 keys tracks by URI and deliberately does not merge recordings. Phase 2 adds a
-`recordings` grouping layer on top, so merge decisions are reversible and auditable.
+Tracks stay keyed by URI. Recordings are a layer on top, rebuilt from tracks + decisions, so
+every merge is reversible and auditable.
+
+## Deduplication
+
+1. Union-find over URIs. Edges: every pair sharing an ISRC (minus pairs you marked
+   `different`), plus pairs you marked `same`.
+2. Recording id: `isrc:<ISRC>` (lowest ISRC in the group) or `uri:<lowest URI>` if there's no
+   ISRC or the ISRC id is taken by a split-off copy.
+3. Primary URI (the copy written to playlists): catalog over local, then the copy in the most
+   sources, then album > single > compilation, then playable, then earliest release.
+4. Suggestions, never auto-merged:
+   - `title_match`: two recordings whose representatives have the same normalized title,
+     same primary artist, same *version signature*, and lengths within 10 s (≤ 3 s = strong).
+   - `local_match`: a local file with the same normalized title and version signature as a
+     catalog recording; artist must agree if the file has one; length within 20 s.
+5. Title normalization strips accents, punctuation, "feat." credits and noise such as
+   "(Official Video)". Qualifiers are read only from brackets and a trailing " - ..." part.
+   Version words (live, remix, edit, acoustic, demo, instrumental, extended, sped up/slowed,
+   re-recorded/"Taylor's Version", cover, orchestral) form the version signature; edition
+   words (remaster, mono/stereo, deluxe, "from ... soundtrack", "2011 Mix", single/album
+   version) don't, but are mentioned in the suggestion.
 
 ## Import algorithm
 
@@ -75,6 +100,7 @@ Phase 1 keys tracks by URI and deliberately does not merge recordings. Phase 2 a
 4. One transaction: upsert tracks, replace source entries per source, upsert playlists,
    forget playlists no longer in the library, delete tracks no longer in any source.
 5. Record new/removed URIs vs. the previous run (the basis for Phase 7 change detection).
+6. Rebuild recordings and suggestions.
 
 ## Error handling
 

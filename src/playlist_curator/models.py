@@ -273,3 +273,5 @@ class ImportCounts(BaseModel):
     skipped: dict[str, int] = Field(default_factory=dict)
     new_tracks: int = 0
     removed_tracks: int = 0
+    recordings: int = 0
+    pending_duplicate_suggestions: int = 0

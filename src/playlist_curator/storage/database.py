@@ -100,6 +100,49 @@ MIGRATIONS: list[str] = [
         errors_json TEXT
     );
     """,
+    # v2 - Phase 2: recording-level deduplication
+    """
+    -- Derived: rebuilt from tracks + dedup_decisions after every import. Safe to drop.
+    CREATE TABLE recordings (
+        recording_id  TEXT PRIMARY KEY,
+        primary_uri   TEXT NOT NULL,
+        title         TEXT NOT NULL,
+        artists_json  TEXT NOT NULL,
+        n_members     INTEGER NOT NULL,
+        has_catalog   INTEGER NOT NULL,
+        has_local     INTEGER NOT NULL
+    );
+
+    CREATE TABLE recording_members (
+        uri          TEXT PRIMARY KEY REFERENCES tracks(uri) ON DELETE CASCADE,
+        recording_id TEXT NOT NULL,
+        -- self | isrc | accepted
+        evidence     TEXT NOT NULL
+    );
+    CREATE INDEX idx_recording_members_rec ON recording_members(recording_id);
+
+    -- Derived: pending suggestions for pairs the user has not decided yet.
+    CREATE TABLE dedup_suggestions (
+        pair_key TEXT PRIMARY KEY,
+        uri_a    TEXT NOT NULL,
+        uri_b    TEXT NOT NULL,
+        -- title_match (catalog vs catalog) | local_match (local file vs catalog)
+        kind     TEXT NOT NULL,
+        strength TEXT NOT NULL,
+        reason   TEXT NOT NULL
+    );
+
+    -- User decisions. Never derived, never dropped by rebuilds. No FK on purpose: a decision
+    -- must survive a track temporarily leaving the crate.
+    CREATE TABLE dedup_decisions (
+        pair_key   TEXT PRIMARY KEY,
+        uri_a      TEXT NOT NULL,
+        uri_b      TEXT NOT NULL,
+        -- same | different
+        decision   TEXT NOT NULL,
+        decided_at TEXT NOT NULL
+    );
+    """,
 ]
 
 

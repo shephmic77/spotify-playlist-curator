@@ -17,7 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ui = [
-    "streamlit>=1.38",
+    "streamlit>=1.50",
     "pandas>=2.2",
 ]
 dev = [

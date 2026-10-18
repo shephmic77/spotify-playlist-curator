@@ -21,6 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from playlist_curator.crate.deduplication import rebuild as rebuild_recordings
 from playlist_curator.models import (
     LIKED_SONGS_SOURCE_ID,
     ImportCounts,
@@ -231,6 +232,11 @@ def import_library(
         counts.new_tracks = len(after - before)
         counts.removed_tracks = len(before - after)
         counts.skipped = dict(skipped)
+
+        say("Grouping duplicate recordings ...")
+        dedup = rebuild_recordings(db)
+        counts.recordings = len(dedup.recordings)
+        counts.pending_duplicate_suggestions = len(dedup.suggestions)
 
         status = "partial" if errors else "ok"
         db.finish_run(run_id, status, counts, errors)

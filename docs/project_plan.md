@@ -12,17 +12,24 @@ inventory CLI and Streamlit Library view, purge, 60 tests with a mocked API.
 Not yet verified against a live account (no credentials in the build environment). First
 real run: see "Verification checklist" below.
 
-## Phase 2 — Master Music Crate (next)
+## Phase 2 — Master Music Crate ✅ (2026-10-18)
 
-- `recordings` layer over `tracks`: group URIs that are the same recording.
-  - Strong evidence: identical ISRC.
-  - Medium: same normalized artist set + normalized title + duration within ±2 s, *only*
-    when neither title carries a version marker (live, remix, remaster, acoustic, demo,
-    edit, instrumental, re-recorded, "Taylor's Version", etc.).
-  - Never merge across different version markers (fixture: studio vs. MTV Unplugged Take On Me).
-  - Every merge stores its evidence and can be split manually.
-- Local files: match to catalog recordings only as *suggestions* (never auto-merge).
-- Inventory additions: duplicate/ambiguous groups view, local-file table, missing-metadata report.
+Delivered:
+- Recording layer over tracks: same ISRC merges automatically; nothing else does.
+- Version-aware title parsing so live/remix/edit/acoustic/sped-up/re-recorded versions are
+  never grouped with the original; edition labels (remaster, mono, "2011 Mix") are noted.
+- Suggestions for near-matches with different ISRCs and for local files that look like catalog
+  songs, with strength and a plain-language reason.
+- Permanent user decisions (same / different / split / undo) that override the ISRC rule and
+  survive re-imports.
+- Primary-copy choice for future playlist writes.
+- Inventory at recording level, missing-metadata counts, local-files report.
+- CLI: `duplicates list|review|same|different|split|decisions|undo`, `local-files`.
+- UI: Duplicates tab with Same/Different/Split/Undo buttons; Local files tab.
+- 90 tests, including a v1 → v2 database upgrade.
+
+Not verified here: the Streamlit tabs (Streamlit can't be installed in the build sandbox);
+the logic behind them is covered by tests.
 
 ## Phase 3 — Playlist understanding (decision needed first)
 

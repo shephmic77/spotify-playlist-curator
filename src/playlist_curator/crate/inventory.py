@@ -31,6 +31,22 @@ class InventorySummary:
     playlists_contents_unavailable: int = 0
     playlists_error: int = 0
     local_file_playlists: list[str] = field(default_factory=list)
+    # Recording level (Phase 2): duplicates merged
+    unique_recordings: int = 0
+    merged_groups: int = 0
+    duplicate_uris_merged: int = 0
+    rec_in_liked: int = 0
+    rec_in_playlists: int = 0
+    rec_in_both: int = 0
+    rec_liked_only: int = 0
+    rec_playlists_only: int = 0
+    local_matched: int = 0
+    local_unmatched: int = 0
+    pending_title_suggestions: int = 0
+    pending_local_suggestions: int = 0
+    missing_release_date: int = 0
+    missing_artist: int = 0
+    missing_duration: int = 0
     last_run: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
@@ -113,6 +129,8 @@ def summarize(db: Database) -> InventorySummary:
         )
     ]
 
+    _recording_stats(db, s)
+
     runs = db.last_runs(1)
     if runs:
         r = runs[0]
@@ -127,15 +145,66 @@ def summarize(db: Database) -> InventorySummary:
     return s
 
 
+def _recording_stats(db: Database, s: InventorySummary) -> None:
+    c = db.conn
+    row = c.execute(
+        """
+        WITH per_rec AS (
+            SELECT rm.recording_id,
+                   MAX(se.kind = 'liked')    AS liked,
+                   MAX(se.kind = 'playlist') AS listed
+            FROM recording_members rm JOIN source_entries se ON se.track_uri = rm.uri
+            GROUP BY rm.recording_id
+        )
+        SELECT COUNT(*)                               AS unique_recordings,
+               COALESCE(SUM(liked), 0)                AS rec_in_liked,
+               COALESCE(SUM(listed), 0)               AS rec_in_playlists,
+               COALESCE(SUM(liked AND listed), 0)     AS rec_in_both,
+               COALESCE(SUM(liked AND NOT listed), 0) AS rec_liked_only,
+               COALESCE(SUM(listed AND NOT liked), 0) AS rec_playlists_only
+        FROM per_rec
+        """
+    ).fetchone()
+    for key in row.keys():  # noqa: SIM118 - sqlite3.Row is not a dict
+        setattr(s, key, int(row[key]))
+    merged = c.execute(
+        "SELECT COUNT(*), COALESCE(SUM(n_members), 0) FROM recordings WHERE n_members > 1"
+    ).fetchone()
+    s.merged_groups = int(merged[0])
+    s.duplicate_uris_merged = int(merged[1]) - int(merged[0])
+    loc = c.execute(
+        """SELECT COALESCE(SUM(r.has_catalog = 1), 0), COALESCE(SUM(r.has_catalog = 0), 0)
+           FROM tracks t JOIN recording_members rm ON rm.uri = t.uri
+           JOIN recordings r ON r.recording_id = rm.recording_id
+           WHERE t.is_local = 1"""
+    ).fetchone()
+    s.local_matched, s.local_unmatched = int(loc[0]), int(loc[1])
+    for kind, attr in (
+        ("title_match", "pending_title_suggestions"),
+        ("local_match", "pending_local_suggestions"),
+    ):
+        n = c.execute("SELECT COUNT(*) FROM dedup_suggestions WHERE kind=?", (kind,)).fetchone()
+        setattr(s, attr, int(n[0]))
+    m = c.execute(
+        """SELECT COALESCE(SUM(is_local = 0 AND (release_date IS NULL OR release_date = '')), 0),
+                  COALESCE(SUM(artists_json = '[]'), 0),
+                  COALESCE(SUM(duration_ms IS NULL), 0)
+           FROM tracks"""
+    ).fetchone()
+    s.missing_release_date, s.missing_artist, s.missing_duration = (int(x) for x in m)
+
+
 def track_table(db: Database) -> list[dict[str, Any]]:
     """One row per unique track with its sources. Used by the Library view."""
     rows = db.conn.execute(
         """
         SELECT t.uri, t.name, t.artists_json, t.album_name, t.release_date, t.duration_ms,
-               t.isrc, t.is_local,
+               t.isrc, t.is_local, rm.recording_id, r.n_members,
                MAX(se.kind='liked') AS liked
         FROM tracks t
         JOIN source_entries se ON se.track_uri = t.uri
+        LEFT JOIN recording_members rm ON rm.uri = t.uri
+        LEFT JOIN recordings r ON r.recording_id = rm.recording_id
         GROUP BY t.uri
         ORDER BY t.name COLLATE NOCASE
         """
@@ -164,6 +233,8 @@ def track_table(db: Database) -> list[dict[str, Any]]:
                 "playlists": names,
                 "local_file": bool(r["is_local"]),
                 "isrc": r["isrc"],
+                "copies_of_recording": r["n_members"] or 1,
+                "recording_id": r["recording_id"],
                 "uri": r["uri"],
             }
         )
@@ -187,3 +258,144 @@ def playlist_table(db: Database) -> list[dict[str, Any]]:
         }
         for r in db.list_playlists()
     ]
+
+
+def _track_info(db: Database, uri: str, source_counts: dict[str, int]) -> dict[str, Any]:
+    t = db.get_track(uri)
+    if t is None:
+        return {"uri": uri, "name": "(no longer in crate)"}
+    return {
+        "uri": uri,
+        "name": t.name,
+        "artists": t.artist_names,
+        "album": t.album_name,
+        "album_type": t.album_type,
+        "release_date": t.release_date,
+        "duration_s": round(t.duration_ms / 1000) if t.duration_ms else None,
+        "isrc": t.isrc,
+        "local_file": t.is_local,
+        "times_in_sources": source_counts.get(uri, 0),
+    }
+
+
+def _source_counts(db: Database) -> dict[str, int]:
+    return {
+        r[0]: r[1]
+        for r in db.conn.execute(
+            "SELECT track_uri, COUNT(*) FROM source_entries GROUP BY track_uri"
+        )
+    }
+
+
+def duplicate_groups(db: Database) -> list[dict[str, Any]]:
+    """Recordings that have more than one URI, with every member and why it was grouped."""
+    counts = _source_counts(db)
+    groups = []
+    for r in db.conn.execute(
+        "SELECT * FROM recordings WHERE n_members > 1 ORDER BY title COLLATE NOCASE"
+    ).fetchall():
+        members = []
+        for m in db.conn.execute(
+            "SELECT uri, evidence FROM recording_members WHERE recording_id=? ORDER BY uri",
+            (r["recording_id"],),
+        ):
+            info = _track_info(db, m["uri"], counts)
+            info["evidence"] = m["evidence"]
+            info["primary"] = m["uri"] == r["primary_uri"]
+            members.append(info)
+        members.sort(key=lambda x: not x["primary"])
+        groups.append(
+            {
+                "recording_id": r["recording_id"],
+                "title": r["title"],
+                "artists": ", ".join(json.loads(r["artists_json"])),
+                "members": members,
+            }
+        )
+    return groups
+
+
+def pending_suggestions(db: Database, kind: str | None = None) -> list[dict[str, Any]]:
+    from playlist_curator.crate.deduplication import short_id
+
+    counts = _source_counts(db)
+    sql = "SELECT * FROM dedup_suggestions"
+    params: tuple[str, ...] = ()
+    if kind:
+        sql += " WHERE kind=?"
+        params = (kind,)
+    rows = db.conn.execute(sql, params).fetchall()
+    out = [
+        {
+            "id": short_id(r["pair_key"]),
+            "pair_key": r["pair_key"],
+            "kind": r["kind"],
+            "strength": r["strength"],
+            "reason": r["reason"],
+            "a": _track_info(db, r["uri_a"], counts),
+            "b": _track_info(db, r["uri_b"], counts),
+        }
+        for r in rows
+    ]
+    out.sort(key=lambda s: (s["kind"], s["strength"] != "strong", s["a"].get("name", "")))
+    return out
+
+
+def decisions_table(db: Database) -> list[dict[str, Any]]:
+    from playlist_curator.crate.deduplication import short_id
+
+    counts = _source_counts(db)
+    return [
+        {
+            "id": short_id(r["pair_key"]),
+            "pair_key": r["pair_key"],
+            "decision": r["decision"],
+            "decided_at": r["decided_at"],
+            "a": _track_info(db, r["uri_a"], counts),
+            "b": _track_info(db, r["uri_b"], counts),
+        }
+        for r in db.conn.execute("SELECT * FROM dedup_decisions ORDER BY decided_at DESC")
+    ]
+
+
+def local_files_table(db: Database) -> list[dict[str, Any]]:
+    """Every local-file entry, where it lives, and what catalog recording it matches (if any)."""
+    from playlist_curator.crate.deduplication import local_title_and_artist
+
+    rows = []
+    for t in (t for t in db.iter_tracks() if t.is_local):
+        title, artist = local_title_and_artist(t)
+        rec = db.conn.execute(
+            """SELECT r.* FROM recording_members rm
+               JOIN recordings r ON r.recording_id = rm.recording_id WHERE rm.uri=?""",
+            (t.uri,),
+        ).fetchone()
+        matched = None
+        if rec is not None and rec["has_catalog"]:
+            matched = f"{rec['title']} — {', '.join(json.loads(rec['artists_json']))}"
+        playlists = [
+            r[0]
+            for r in db.conn.execute(
+                """SELECT DISTINCT p.name FROM source_entries se
+                   JOIN playlists p ON p.spotify_id = se.source_id
+                   WHERE se.kind='playlist' AND se.track_uri=?""",
+                (t.uri,),
+            )
+        ]
+        n_suggestions = db.conn.execute(
+            "SELECT COUNT(*) FROM dedup_suggestions WHERE kind='local_match' AND uri_a=?",
+            (t.uri,),
+        ).fetchone()[0]
+        rows.append(
+            {
+                "title": title or "(no title)",
+                "artist": artist or "",
+                "duration_s": round(t.duration_ms / 1000) if t.duration_ms else None,
+                "in_playlists": playlists,
+                "matched_recording": matched or "",
+                "pending_suggestions": n_suggestions,
+                "uri": t.uri,
+            }
+        )
+    rows.sort(key=lambda r: (r["matched_recording"] != "", r["title"].lower()))
+    return rows
