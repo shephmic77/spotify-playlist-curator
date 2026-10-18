@@ -1,0 +1,30 @@
+# Secrets and personal library data - never commit
+.env
+data/
+*.sqlite
+*.sqlite3
+*.db
+.tokens.json
+exports/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml

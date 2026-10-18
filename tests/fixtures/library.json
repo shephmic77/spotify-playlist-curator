@@ -1,0 +1,124 @@
+{
+  "_comment": "Synthetic library shaped like post-Feb-2026 Spotify Web API responses. IDs are fake.",
+  "me": {"id": "test_user", "display_name": "Test User", "type": "user"},
+  "tracks": {
+    "midnight_city": {
+      "type": "track", "id": "trk_midnight", "uri": "spotify:track:trk_midnight",
+      "name": "Midnight City", "duration_ms": 243960, "explicit": false, "is_local": false,
+      "is_playable": true, "disc_number": 1, "track_number": 2,
+      "external_ids": {"isrc": "FRZID1100001"},
+      "artists": [{"id": "art_m83", "name": "M83", "type": "artist"}],
+      "album": {"id": "alb_hurry", "name": "Hurry Up, We're Dreaming", "album_type": "album",
+                "release_date": "2011-10-14", "release_date_precision": "day"}
+    },
+    "take_on_me_album": {
+      "type": "track", "id": "trk_tom_album", "uri": "spotify:track:trk_tom_album",
+      "name": "Take On Me", "duration_ms": 225280, "explicit": false, "is_local": false,
+      "external_ids": {"isrc": "GBAYE8500001"},
+      "artists": [{"id": "art_aha", "name": "a-ha", "type": "artist"}],
+      "album": {"id": "alb_hunting", "name": "Hunting High and Low", "album_type": "album",
+                "release_date": "1985", "release_date_precision": "year"}
+    },
+    "take_on_me_compilation": {
+      "type": "track", "id": "trk_tom_comp", "uri": "spotify:track:trk_tom_comp",
+      "name": "Take On Me", "duration_ms": 225280, "explicit": false, "is_local": false,
+      "external_ids": {"isrc": "GBAYE8500001"},
+      "artists": [{"id": "art_aha", "name": "a-ha", "type": "artist"}],
+      "album": {"id": "alb_hits", "name": "Headlines and Deadlines", "album_type": "compilation",
+                "release_date": "1991-11", "release_date_precision": "month"}
+    },
+    "take_on_me_mtv": {
+      "type": "track", "id": "trk_tom_mtv", "uri": "spotify:track:trk_tom_mtv",
+      "name": "Take On Me - Live from MTV Unplugged", "duration_ms": 238000, "explicit": false,
+      "is_local": false, "external_ids": {"isrc": "DEUM71701234"},
+      "artists": [{"id": "art_aha", "name": "a-ha", "type": "artist"}],
+      "album": {"id": "alb_unplugged", "name": "MTV Unplugged - Summer Solstice",
+                "album_type": "album", "release_date": "2017-10-06", "release_date_precision": "day"}
+    },
+    "africa": {
+      "type": "track", "id": "trk_africa", "uri": "spotify:track:trk_africa",
+      "name": "Africa", "duration_ms": 295893, "explicit": false, "is_local": false,
+      "external_ids": {"isrc": "USSM19801234"},
+      "artists": [{"id": "art_toto", "name": "TOTO", "type": "artist"}],
+      "album": {"id": "alb_toto4", "name": "Toto IV", "album_type": "album",
+                "release_date": "1982-04-08", "release_date_precision": "day"}
+    },
+    "nightcall": {
+      "type": "track", "id": "trk_nightcall", "uri": "spotify:track:trk_nightcall",
+      "name": "Nightcall", "duration_ms": 258000, "explicit": false, "is_local": false,
+      "artists": [{"id": "art_kav", "name": "Kavinsky", "type": "artist"},
+                  {"id": "art_lovefoxxx", "name": "Lovefoxxx", "type": "artist"}],
+      "album": {"id": "alb_outrun", "name": "OutRun", "album_type": "album",
+                "release_date": "2013-02-22", "release_date_precision": "day"}
+    },
+    "clair_de_lune": {
+      "type": "track", "id": "trk_clair", "uri": "spotify:track:trk_clair",
+      "name": "Suite bergamasque, L. 75: III. Clair de lune", "duration_ms": 300000,
+      "explicit": false, "is_local": false, "external_ids": {"isrc": "FRZ119900001"},
+      "artists": [{"id": "art_debussy", "name": "Claude Debussy", "type": "artist"}],
+      "album": {"id": "alb_piano", "name": "Piano Works", "album_type": "album",
+                "release_date": "1999", "release_date_precision": "year"}
+    },
+    "local_remix": {
+      "type": "track", "id": null,
+      "uri": "spotify:local:Some+Artist:YouTube+Rips:Song+Title%3A+Night+Remix:215",
+      "name": "Song Title: Night Remix", "duration_ms": 215000, "is_local": true,
+      "artists": [{"id": null, "name": "Some Artist", "type": "artist"}],
+      "album": {"id": null, "name": "YouTube Rips", "album_type": null,
+                "release_date": null, "release_date_precision": null}
+    },
+    "local_bare": {
+      "type": "track", "id": null,
+      "uri": "spotify:local:::untitled+bootleg:187",
+      "name": "", "duration_ms": 0, "is_local": true, "artists": [], "album": {}
+    }
+  },
+  "episode": {
+    "type": "episode", "id": "ep_1", "uri": "spotify:episode:ep_1", "name": "Some Podcast Ep"
+  },
+  "liked": [
+    {"added_at": "2026-09-01T12:00:00Z", "track": "midnight_city"},
+    {"added_at": "2026-08-01T12:00:00Z", "track": "take_on_me_album"},
+    {"added_at": "2026-07-01T12:00:00Z", "track": null},
+    {"added_at": "2026-06-01T12:00:00Z", "track": "clair_de_lune"}
+  ],
+  "playlists": [
+    {
+      "id": "pl_80s", "name": "80s", "description": "the good stuff", "public": false,
+      "collaborative": false, "snapshot_id": "snap_80s_v1",
+      "owner": {"id": "test_user", "display_name": "Test User"},
+      "entries": ["take_on_me_album", "africa", "midnight_city", "nightcall"]
+    },
+    {
+      "id": "pl_synth", "name": "Synth, Neon & Night Drives", "description": "", "public": false,
+      "collaborative": false, "snapshot_id": "snap_synth_v1",
+      "owner": {"id": "test_user", "display_name": "Test User"},
+      "entries": ["midnight_city", "nightcall", "take_on_me_compilation", "take_on_me_mtv"],
+      "legacy_track_field": true
+    },
+    {
+      "id": "pl_local", "name": "Local Files", "description": null, "public": false,
+      "collaborative": false, "snapshot_id": "snap_local_v1",
+      "owner": {"id": "test_user", "display_name": "Test User"},
+      "entries": ["local_remix", "local_bare", "local_remix"]
+    },
+    {
+      "id": "pl_collab", "name": "Road Trip (collab)", "description": "", "public": false,
+      "collaborative": true, "snapshot_id": "snap_collab_v1",
+      "owner": {"id": "friend_user", "display_name": "Friend"},
+      "entries": ["africa", "__episode__", "africa", null]
+    },
+    {
+      "id": "pl_followed", "name": "Today's Top Hits", "description": "", "public": true,
+      "collaborative": false, "snapshot_id": "snap_top_v1",
+      "owner": {"id": "spotify", "display_name": "Spotify"},
+      "forbidden": true, "entries": []
+    },
+    {
+      "id": "pl_empty", "name": "New Playlist", "description": "", "public": false,
+      "collaborative": false, "snapshot_id": "snap_empty_v1",
+      "owner": {"id": "test_user", "display_name": "Test User"},
+      "entries": []
+    }
+  ]
+}
