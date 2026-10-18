@@ -117,3 +117,36 @@ def test_untagged_songs_are_never_guessed(db, lib):
     res = sc.build_drafts(db, descriptors=lib2)
     assert res.untagged == 1
     assert "uri:spotify:track:chill1" in res.unassigned
+
+
+def test_rare_tags_count_more_than_common_ones(db, lib):
+    library = sc.load_library(db, lib)
+    # "indie" is on 20 songs, "dream pop" too, but "rock" (gym) and "hip hop" (rap) likewise;
+    # a tag on nearly every song would get close to 1.0
+    assert library.idf["saxophone"] > 1.0
+    common = {f"uri:spotify:track:{g}{i}" for g in ("chill", "gym") for i in range(20)}
+    vecs = {r: dict(v) for r, v in library.vectors.items()}
+    for r in common:
+        vecs[r]["everywhere"] = 1.0
+    spec = sc.tag_specificity(vecs)
+    assert spec["everywhere"] < spec["indie"]
+
+
+def test_broad_definitions_are_capped(db, lib):
+    broad = idn.create_identity(db, "Everything", concept="too broad")
+    idn.edit_identity(
+        db, broad.identity_id, add_tags={"indie": 1.0, "rock": 1.0, "jazz": 1.0, "hip hop": 1.0}
+    )
+    now = utcnow()
+    db.conn.executemany(  # examples from four different sounds -> a very low natural bar
+        "INSERT INTO identity_examples VALUES (?,?,?,?,?)",
+        [
+            (broad.identity_id, f"spotify:track:{g}{i}", "reference", "user", now)
+            for g in ("chill", "gym", "jazz", "rap")
+            for i in range(5)
+        ],
+    )
+    d = draft_by_name(sc.build_drafts(db, descriptors=lib))["Everything"]
+    tagged = sum(1 for v in lib.values() if v.by_source)
+    assert len(d.include) <= int(sc.MAX_SHARE * tagged) + 1
+    assert any("capped" in n for n in d.notes)

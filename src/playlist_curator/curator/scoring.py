@@ -32,6 +32,7 @@ how specific the tag data was (song-level tags, artist-level only, or none).
 from __future__ import annotations
 
 import json
+import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
@@ -51,6 +52,9 @@ THRESHOLD_PERCENTILE = 0.30
 THRESHOLD_MIN, THRESHOLD_MAX = 0.30, 0.75
 REVIEW_BAND = 0.08
 DEFAULT_THRESHOLD = 0.45  # when a playlist has fewer than 3 scorable examples
+MAX_SHARE = 0.20  # a playlist may hold at most this share of the tagged library
+MAX_OVERLAPS_REPORTED = 10
+OVERLAP_REPORT = 0.7
 
 
 @dataclass
@@ -98,6 +102,7 @@ class Library:
     evidence: dict[str, str]
     titles: dict[str, str]
     rec_of_uri: dict[str, str]
+    idf: dict[str, float]  # tag specificity: rare tags count more than common ones
 
 
 def load_library(db: Database, descriptors: dict[str, Descriptors] | None = None) -> Library:
@@ -125,10 +130,11 @@ def load_library(db: Database, descriptors: dict[str, Descriptors] | None = None
             years[rid] = y
     tags = sorted({t for v in vectors.values() for t in v})
     tindex = {t: i for i, t in enumerate(tags)}
+    idf = tag_specificity(vectors)
     m = np.zeros((len(rids), max(len(tags), 1)))
     for i, rid in enumerate(rids):
         for t, w in vectors[rid].items():
-            m[i, tindex[t]] = w
+            m[i, tindex[t]] = w * idf[t]
     norms = np.linalg.norm(m, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     rec_of_uri = {
@@ -144,7 +150,21 @@ def load_library(db: Database, descriptors: dict[str, Descriptors] | None = None
         evidence,
         titles,
         rec_of_uri,
+        idf,
     )
+
+
+def tag_specificity(vectors: dict[str, dict[str, float]]) -> dict[str, float]:
+    """IDF-style weight per tag: ln((N + 1) / (df + 1)) + 1, where df counts songs carrying the
+    tag at weight ≥ 0.3. "rock" on 40 % of the library gets ~1.9; "nu metal" on 2 % gets ~4.9."""
+    n = sum(1 for v in vectors.values() if v)
+    df: dict[str, int] = defaultdict(int)
+    for v in vectors.values():
+        for t, w in v.items():
+            if w >= TAG_PRESENT:
+                df[t] += 1
+    tags = {t for v in vectors.values() for t in v}
+    return {t: math.log((n + 1) / (df.get(t, 0) + 1)) + 1 for t in tags}
 
 
 def _examples(db: Database, identity_id: int, lib: Library) -> dict[str, set[str]]:
@@ -191,7 +211,8 @@ def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft
         draft.notes.append("hand-picked: holds exactly its chosen songs")
         return draft
 
-    wsum = sum(weights.values())
+    eff = {t: w * lib.idf.get(t, 1.0) for t, w in weights.items()}
+    wsum = sum(eff.values())
     ref_rows = [lib.index[r] for r in refs if r in lib.index and lib.vectors[r]]
     ref_matrix = lib.matrix[ref_rows] if ref_rows else None
     ref_ids = [lib.rids[i] for i in ref_rows]
@@ -206,7 +227,7 @@ def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft
             return SongScore(
                 rid, "out", 0.0, None, None, lib.evidence[rid], ["missing required tag"]
             )
-        tag_score = sum(w * vec.get(t, 0.0) for t, w in weights.items()) / wsum if wsum else None
+        tag_score = sum(w * vec.get(t, 0.0) for t, w in eff.items()) / wsum if wsum else None
         example_score = None
         if sims_all is not None:
             row = sims_all[lib.index[rid]]
@@ -219,7 +240,7 @@ def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft
         parts = [x for x in (tag_score, example_score) if x is not None]
         score = sum(parts) / len(parts) if parts else 0.0
         if tag_score:
-            top_tags = _top_tag_reasons(vec, weights)
+            top_tags = _top_tag_reasons(vec, eff)
             if top_tags:
                 reasons.insert(0, f"tags: {top_tags}")
         bad = max((vec.get(t, 0.0) for t in avoid), default=0.0)
@@ -265,6 +286,17 @@ def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft
     else:
         threshold = DEFAULT_THRESHOLD
         draft.notes.append("fewer than 3 usable example songs: using the default threshold")
+    # No playlist may take more than MAX_SHARE of the tagged library: a definition that broad
+    # isn't a playlist identity. Raise the bar to the score at that share.
+    tagged = sorted((s.score for s in scores.values() if s.score > 0), reverse=True)
+    n_tagged = sum(1 for r in lib.rids if lib.vectors[r])
+    cap_rank = int(MAX_SHARE * n_tagged)
+    if cap_rank and len(tagged) > cap_rank and tagged[cap_rank] >= threshold:
+        threshold = min(THRESHOLD_MAX, tagged[cap_rank] + 1e-6)
+        draft.notes.append(
+            f"definition is broad: capped at about {round(100 * MAX_SHARE)}% of your library; "
+            "add more specific tags or examples to sharpen it"
+        )
     draft.threshold = round(threshold, 3)
     if not weights and not ref_rows:
         draft.notes.append("no tags and no example songs: nothing to match against")
@@ -311,7 +343,7 @@ def build_drafts(db: Database, *, descriptors: dict[str, Descriptors] | None = N
                 continue
             shared = len(members[a] & members[b])
             smaller = min(len(members[a]), len(members[b]))
-            if shared and shared / smaller >= 0.6:
+            if shared and shared / smaller >= OVERLAP_REPORT:
                 overlaps.append(
                     {
                         "a": names[a],
@@ -320,7 +352,8 @@ def build_drafts(db: Database, *, descriptors: dict[str, Descriptors] | None = N
                         "share_of_smaller": round(shared / smaller, 2),
                     }
                 )
-    overlaps.sort(key=lambda x: -x["share_of_smaller"])
+    overlaps.sort(key=lambda x: (-x["share_of_smaller"], -x["shared"]))
+    overlaps = overlaps[:MAX_OVERLAPS_REPORTED]
 
     summary = {
         "playlists": {

@@ -124,17 +124,20 @@ exactly their example songs):
 
 1. Essential → in. Excluded → out. Untagged → out (never guessed).
 2. Required tags: needs one at weight ≥ 0.3, else out.
-3. Tag score = Σ wₜ·sₜ / Σ wₜ.
-4. Example score = mean cosine similarity to the 3 most similar example songs, excluding *s*.
+3. Tag score = Σ wₜ·idfₜ·sₜ / Σ wₜ·idfₜ, where idfₜ = ln((N+1)/(dfₜ+1)) + 1 (df = songs with
+   the tag at ≥ 0.3), so specific tags ("nu metal") count more than common ones ("rock").
+4. Example score = mean cosine similarity (on idf-weighted tag vectors) to the 3 most similar
+   example songs, excluding *s*.
 5. Score = mean of the available parts.
 6. Avoided tag ≥ 0.5 → out; weaker → score × (1 − weight).
 7. Preferred years: known original year outside the range → × 0.75; unknown → no change.
 8. Threshold per playlist = 30th percentile of its example songs' scores (leave-one-out),
-   clamped to 0.30–0.75 (0.45 if fewer than 3 usable examples). In ≥ threshold;
-   review within 0.08 below.
+   clamped to 0.30–0.75 (0.45 if fewer than 3 usable examples), then raised if needed so
+   that at most 20 % of the tagged library qualifies (a definition that broad isn't an
+   identity; the draft notes it). In ≥ threshold; review within 0.08 below.
 
 Examples get no free pass, so misfits from old playlists can drop out. Overlapping drafts
-(≥ 60 % of the smaller playlist shared) are reported. Scores rank and explain; they are not
+(≥ 70 % of the smaller playlist shared; top 10) are reported. Scores rank and explain; they are not
 probabilities.
 
 ## Describe (implemented, `curator/describe.py`)
