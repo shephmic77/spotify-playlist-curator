@@ -1,7 +1,8 @@
 # Scoring methodology
 
-The existing-playlist analysis (Phase 3a) is implemented; scoring of new playlists (Phase 4) is
-still a design.
+Implemented: existing-playlist analysis (3a), proposals (3b), and draft scoring (4,
+`curator/scoring.py`, summarised at the end of this file). The design sections below are the
+original plan; where they differ, the "implemented" sections are authoritative.
 
 ## Goals
 
@@ -114,3 +115,34 @@ feedback in Phase 5.
   silhouette (cosine); clusters < 15 songs dropped. A cluster with cosine ≥ 0.80 to a described
   concept counts as covered (shown as supporting evidence); others become proposals.
 - Described concepts with profile cosine ≥ 0.85 are flagged as similar.
+
+
+## Draft scoring (implemented, `curator/scoring.py`)
+
+Per song *s*, per playlist *p* (only playlists with auto-maintain on; hand-picked playlists hold
+exactly their example songs):
+
+1. Essential → in. Excluded → out. Untagged → out (never guessed).
+2. Required tags: needs one at weight ≥ 0.3, else out.
+3. Tag score = Σ wₜ·sₜ / Σ wₜ.
+4. Example score = mean cosine similarity to the 3 most similar example songs, excluding *s*.
+5. Score = mean of the available parts.
+6. Avoided tag ≥ 0.5 → out; weaker → score × (1 − weight).
+7. Preferred years: known original year outside the range → × 0.75; unknown → no change.
+8. Threshold per playlist = 30th percentile of its example songs' scores (leave-one-out),
+   clamped to 0.30–0.75 (0.45 if fewer than 3 usable examples). In ≥ threshold;
+   review within 0.08 below.
+
+Examples get no free pass, so misfits from old playlists can drop out. Overlapping drafts
+(≥ 60 % of the smaller playlist shared) are reported. Scores rank and explain; they are not
+probabilities.
+
+## Describe (implemented, `curator/describe.py`)
+
+Offline dictionary of ~20 situation/mood term groups → weighted tags + avoided tags;
+"no X / without X / not (too) X" adds X to avoid; "lyrics are fine / can still have lyrics"
+caps "instrumental" at 0.4; decades in the text → preferred years. Optional Claude engine
+returns the same JSON shape, validated and clamped. Examples you name are resolved locally
+(artist exact match incl. split credits, then song title exact / prefix / fuzzy ≥ 0.85); tags
+shared by ≥ 50 % of examples are added at 0.8 × support. Grounding reports how many library
+songs carry each tag and suggests close library tags for misses.

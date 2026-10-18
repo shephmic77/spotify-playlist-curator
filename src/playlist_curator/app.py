@@ -26,9 +26,11 @@ from playlist_curator.crate.inventory import (
     summarize,
     track_table,
 )
+from playlist_curator.curator import describe as ds
 from playlist_curator.curator import discovery as disc
 from playlist_curator.curator import identities as idn
 from playlist_curator.curator import intents as it
+from playlist_curator.curator import scoring as sc
 from playlist_curator.curator.analysis import analyze
 from playlist_curator.spotify.auth import AuthError, TokenManager, TokenStore
 from playlist_curator.spotify.client import SpotifyAPIError, SpotifyClient
@@ -107,6 +109,8 @@ with Database(settings.db_path) as db:
     proposals = disc.load_proposals(db)
     identities = idn.list_identities(db)
     readable = [r for r in db.list_playlists() if r["contents_status"] == "fetched"]
+    draft_run = sc.latest_run(db)
+    drafts = {i.identity_id: sc.load_draft(db, i.identity_id, draft_run) for i in identities}
 
 st.title("Library")
 
@@ -133,16 +137,19 @@ c[4].metric(
 )
 st.caption("Unassigned songs will appear here once playlist assignment exists (Phase 4).")
 
-tab_new, tab_analysis, tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = st.tabs(
-    [
-        f"New collection ({len(proposals)} to review)",
-        "Old playlist analysis",
-        "Songs",
-        f"Duplicates ({len(suggestions)} to review)",
-        "Local files",
-        "Source playlists",
-        "Import history",
-    ]
+tab_new, tab_drafts, tab_analysis, tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = (
+    st.tabs(
+        [
+            f"New collection ({len(proposals)} to review)",
+            "Draft playlists",
+            "Old playlist analysis",
+            "Songs",
+            f"Duplicates ({len(suggestions)} to review)",
+            "Local files",
+            "Source playlists",
+            "Import history",
+        ]
+    )
 )
 
 
@@ -161,6 +168,73 @@ with tab_new:
     left, right = st.columns([3, 2])
 
     with right:
+        st.subheader("Describe a playlist in your words")
+        st.caption(
+            "Built-in dictionary for common moods and situations; with ANTHROPIC_API_KEY set, "
+            "Claude translates anything. Only your description is sent, never your library. "
+            "Examples are matched in your library only."
+        )
+        with st.form("describe"):
+            text = st.text_area(
+                "Description",
+                placeholder="music to study to, chill, lyrics ok but not distracting, not loud",
+                height=80,
+            )
+            examples = st.text_input("Examples (artists or songs, comma-separated)", "")
+            new_name = st.text_input("Playlist name (to create)", "")
+            c1, c2 = st.columns(2)
+            preview = c1.form_submit_button("Preview")
+            create = c2.form_submit_button("Create playlist", type="primary")
+        if (preview or create) and text.strip():
+            try:
+                recipe = ds.translate(
+                    text,
+                    engine="auto",
+                    api_key=settings.anthropic_api_key,
+                    model=settings.anthropic_model,
+                )
+            except ds.DescribeError as exc:
+                st.error(str(exc))
+                recipe = None
+            if recipe is not None:
+                with Database(settings.db_path) as db:
+                    desc_all = sc.load_descriptors(db)
+                    refs = [x.strip() for x in examples.split(",") if x.strip()]
+                    matches = ds.resolve_examples(db, refs) if refs else []
+                    uris = [u for m in matches for u in m.uris]
+                    for tag, support in ds.example_tags(uris, db, desc_all):
+                        if tag not in recipe.tags and tag not in recipe.avoid:
+                            recipe.tags[tag] = round(0.8 * support, 2)
+                    report = ds.ground(recipe, desc_all)
+                    if create and new_name.strip():
+                        ds.apply_recipe(db, recipe, create=new_name.strip(), example_uris=uris)
+                st.caption(f"engine: {recipe.engine}")
+                for m in matches:
+                    if m.kind == "none":
+                        st.warning(f"'{m.query}' isn't in your library")
+                    else:
+                        st.write(f"✓ {m.query}: {len(m.uris)} song(s) ({m.kind})")
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "tag": r.tag,
+                                "weight": r.weight,
+                                "your songs": r.songs,
+                                "closest in library": ", ".join(t for t, _ in r.suggestions),
+                            }
+                            for r in report
+                        ]
+                    ),
+                    hide_index=True,
+                )
+                if recipe.avoid:
+                    st.write("Avoid: " + ", ".join(recipe.avoid))
+                if create and new_name.strip():
+                    st.success(f"Created '{new_name.strip()}'. Build drafts to fill it.")
+                elif create:
+                    st.warning("Give the playlist a name to create it.")
+
         st.subheader(f"Your new playlists ({len(identities)})")
         if not identities:
             st.write("None yet. Accept a proposal to create one.")
@@ -284,6 +358,56 @@ with tab_new:
                 )
                 if st.form_submit_button("Save"):
                     act(it.set_intent, r["spotify_id"], text or title, kind, title)
+
+
+with tab_drafts:
+    st.caption(
+        "Every song is scored against each playlist's own definition; a song can be in several "
+        "playlists or none. Scores rank songs and aren't probabilities. Nothing is sent to "
+        "Spotify from here."
+    )
+    if st.button("Build / refresh drafts", type="primary", disabled=not identities):
+        with Database(settings.db_path) as db:
+            sc.build_drafts(db)
+        st.rerun()
+    if draft_run is None:
+        st.info("No drafts yet. Accept some playlists, then build drafts.")
+    else:
+        overview = [
+            {
+                "playlist": i.name,
+                "songs": sum(1 for r in drafts[i.identity_id] if r["decision"] == "include"),
+                "to review": sum(1 for r in drafts[i.identity_id] if r["decision"] == "review"),
+                "hand-picked": not i.auto_maintain,
+            }
+            for i in identities
+        ]
+        st.dataframe(pd.DataFrame(overview), width="stretch", hide_index=True)
+        names = {i.name: i.identity_id for i in identities}
+        pick = st.selectbox("Playlist", list(names))
+        rows = drafts.get(names[pick], []) if pick else []
+
+        def table(decision: str) -> pd.DataFrame:
+            return pd.DataFrame(
+                [
+                    {
+                        "score": r["score"],
+                        "song": r["title"],
+                        "artists": r["artists"],
+                        "tag fit": r["tag_score"],
+                        "like examples": r["example_score"],
+                        "evidence": r["evidence"],
+                        "why": "; ".join(r["reasons"]),
+                    }
+                    for r in rows
+                    if r["decision"] == decision
+                ]
+            )
+
+        st.markdown(f"**In the draft** ({sum(r['decision'] == 'include' for r in rows)})")
+        st.dataframe(table("include"), width="stretch", hide_index=True)
+        st.markdown(f"**Borderline** ({sum(r['decision'] == 'review' for r in rows)})")
+        st.dataframe(table("review"), width="stretch", hide_index=True)
 
 
 with tab_analysis:

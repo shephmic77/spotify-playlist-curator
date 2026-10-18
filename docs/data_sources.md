@@ -54,6 +54,15 @@ triggers new requests.
 These outrank external tags. They're the only way to capture subjective categories like
 "sounds like the 80s but is from 2013".
 
+## Optional: Claude for describing playlists
+
+`curator describe` can use the Anthropic API (`ANTHROPIC_API_KEY`, default model
+`claude-haiku-5-5`) to turn a description you type into a tag recipe. The request contains only
+that text and fixed instructions. No Spotify data (songs, artists, playlists, tags derived from
+them) is sent, consistent with Spotify's prohibition on ingesting Spotify Content into AI models.
+Without a key, a built-in dictionary is used. Matching songs to the recipe is local and
+rule-based.
+
 ## Not used
 
 - Spotify audio features / analysis / recommendations (unavailable to new apps, and Spotify

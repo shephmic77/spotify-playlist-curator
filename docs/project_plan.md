@@ -62,11 +62,15 @@ Delivered:
 - CLI (`intents`, `propose`, `proposals`, `identities`) and a "New collection" UI tab.
 - 155 tests, including a smoke run of the whole Streamlit script against a stand-in module.
 
-## Phase 4 — Classification and curation
+## Phase 4 — Describe in your words + draft playlists ✅ (2026-10-18)
 
-Per-playlist transparent scoring (see `scoring_methodology.md`), multi-label, with entry/exit
-hysteresis, confidence as evidence coverage (not probability), "needs review" queue, cohesion
-and redundancy checks, unassigned songs allowed.
+- `curator describe`: description → tag recipe (offline dictionary, or Claude on the typed text
+  only), examples resolved locally (`--like Nujabes --like "Luv(sic)"`), grounding against the
+  library's tags, `--create` / `--apply`. UI form in the New collection tab.
+- `curator draft`: per-playlist scoring (required/avoided tags, tag fit, similarity to examples,
+  era preference, adaptive threshold, review band), reasons per song, overlap and unassigned
+  reports, last 5 runs kept. `curator drafts show/unassigned`. Draft playlists UI tab.
+- 176 tests.
 
 ## Phase 5 — Feedback
 

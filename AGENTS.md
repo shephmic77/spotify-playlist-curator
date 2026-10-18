@@ -75,6 +75,9 @@ Re-verify against docs/spotify_api.md links before adding endpoints.
 - The new collection is built **from scratch**. Old playlists and their descriptions are
   evidence; never propose keeping/renaming an old playlist or write to one.
 - Hand-picked identities (`auto_maintain = 0`) never get songs added automatically.
+- `describe` may send **only the user's typed description** to Claude. Never include song,
+  artist, playlist, tag or any other library data in that request. Examples are resolved
+  locally. Song-to-playlist matching stays rule-based (`curator/scoring.py`).
 - Later phases reference **recordings** (`recording_id`), not URIs. Write the recording's
   `primary_uri` to Spotify.
 - Log with `logging.getLogger(__name__)`; never log tokens or full Authorization headers.
@@ -87,5 +90,6 @@ pip install -e ".[ui,dev]"
 pytest
 ruff check . && ruff format --check .
 curator auth login | import | inventory | playlists | duplicates ... | local-files
-curator enrich | analyze | intents ... | propose | proposals ... | identities ... | ui | purge
+curator enrich | analyze | intents ... | propose | proposals ... | identities ...
+curator describe ... | draft | drafts [show|unassigned] | ui | purge
 ```

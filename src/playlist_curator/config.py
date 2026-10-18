@@ -38,6 +38,9 @@ class Settings:
     scopes: tuple[str, ...] = READ_SCOPES
     log_level: str = "INFO"
     lastfm_api_key: str = ""
+    # Optional: lets `curator describe` translate free-form descriptions with Claude.
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-haiku-5-5"
     # MusicBrainz requires a contact (URL or email) in the User-Agent of every request.
     musicbrainz_contact: str = DEFAULT_MB_CONTACT
 
@@ -75,6 +78,9 @@ def load_settings(env_file: str | os.PathLike[str] | None = ".env") -> Settings:
         data_dir=Path(os.environ.get("CURATOR_DATA_DIR", "data")).expanduser(),
         log_level=os.environ.get("CURATOR_LOG_LEVEL", "INFO").upper(),
         lastfm_api_key=os.environ.get("LASTFM_API_KEY", "").strip(),
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
+        anthropic_model=os.environ.get("ANTHROPIC_MODEL", "claude-haiku-5-5").strip()
+        or "claude-haiku-5-5",
         musicbrainz_contact=os.environ.get("MUSICBRAINZ_CONTACT", DEFAULT_MB_CONTACT).strip()
         or DEFAULT_MB_CONTACT,
     )

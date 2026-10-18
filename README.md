@@ -16,7 +16,8 @@ or deletes your original playlists.
 | 2 | Master Music Crate: recording-level dedup, provenance, local files | **Done** |
 | 3a | Tags from MusicBrainz + Last.fm; analysis of your existing playlists | **Done** |
 | 3b | Proposals for a new collection (from your descriptions + library clusters); editable playlist definitions | **Done** |
-| 4 | Score songs into the approved playlists (draft playlists) | Next |
+| 4 | Describe playlists in your own words; score songs into draft playlists with reasons | **Done** |
+| 5 | Feedback: accept / reject / essential per song, learn per playlist | Next |
 | 4 | Multi-label scoring and draft playlists | Planned |
 | 5 | Feedback and personalization | Planned |
 | 6 | Creating playlists in Spotify (preview → approve → write, rollback) | Planned |
@@ -49,6 +50,15 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
   (`curator intents`), then `curator propose` suggests concepts from those descriptions and
   from clusters in your library's tags, each with its evidence. Accepting one creates an
   editable playlist definition (concept, tags, preferred years, example songs).
+- **Describe a playlist in your own words** (`curator describe`): "music to study to, chill,
+  lyrics ok but not distracting, not loud" plus examples like `--like Nujabes --like "Luv(sic)"`
+  becomes tag rules and example songs. A built-in dictionary covers common moods and
+  situations; with `ANTHROPIC_API_KEY` set, Claude translates anything. Only your typed
+  description is ever sent to Claude, never songs or anything from your library; examples
+  are matched locally.
+- **Draft playlists** (`curator draft`): every song is scored against every playlist's own
+  definition (tags, examples, required/avoided tags, preferred years). Songs can land in
+  several playlists or none; each gets a plain-language reason. Nothing goes to Spotify.
 - **Analysis of your existing playlists** (`curator analyze`): each playlist's sound and era,
   cohesion, songs that don't fit, drift between early and later additions, staleness, and
   overlapping or redundant playlists.
@@ -121,6 +131,9 @@ curator proposals accept 3 7 12   ·   curator proposals reject 5
 curator identities          # your new playlists; `identities edit NAME --add-tag ...`
 curator identities new "Classical" --like "Calm"   # create/copy a playlist without a proposal
 curator identities edit "Classical" --require-tag classical   # only songs with that tag
+curator describe "study music, chill, lyrics ok, not loud" --like Nujabes --create "Study"
+curator draft               # fill every playlist with matching songs (drafts only)
+curator drafts show "Study" --why    ·    curator drafts unassigned
 curator ui                  # Streamlit interface at http://localhost:8501
 ```
 
@@ -161,7 +174,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 156 tests; Spotify, MusicBrainz and Last.fm are mocked
+pytest            # 176 tests; Spotify, MusicBrainz and Last.fm are mocked
 ruff check . && ruff format --check .
 ```
 
@@ -171,7 +184,8 @@ Architecture: [docs/architecture.md](docs/architecture.md).
 ## Privacy
 
 Everything is stored locally in `data/`. Besides Spotify's own API, the only outside requests
-are per-song tag lookups: an ISRC to MusicBrainz, and artist + title to Last.fm (if you set a key).
+are per-song tag lookups (an ISRC to MusicBrainz, artist + title to Last.fm if you set a key)
+and, only if you set `ANTHROPIC_API_KEY`, the description text you type into `describe`.
 No Spotify data is sent to any AI model by this application.
 
 Tag data comes from [MusicBrainz](https://musicbrainz.org) and [Last.fm](https://www.last.fm)

@@ -117,6 +117,10 @@ def test_app_renders_every_tab_with_a_library(app_env, monkeypatch):
         props, _ = disc.propose(db, descriptors=desc)
         disc.save_proposals(db, props)
         disc.accept(db, disc.load_proposals(db)[0].proposal_id)
+        from playlist_curator.curator import scoring as sc
+
+        monkeypatch.setattr(sc, "load_descriptors", lambda _db: desc)
+        sc.build_drafts(db, descriptors=desc)
     runpy.run_path(str(APP), run_name="__main__")
-    assert FAKE_ST.calls.count("dataframe") >= 3
+    assert FAKE_ST.calls.count("dataframe") >= 6  # includes draft overview + two draft tables
     assert "metric" in FAKE_ST.calls

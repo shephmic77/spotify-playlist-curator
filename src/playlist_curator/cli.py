@@ -10,7 +10,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from playlist_curator import cli_concepts
+from playlist_curator import cli_concepts, cli_drafts
 from playlist_curator.config import ConfigError, Settings, configure_logging, load_settings
 from playlist_curator.crate import deduplication as dedup
 from playlist_curator.crate.importer import AccountMismatchError, import_library
@@ -575,6 +575,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_analyze)
 
     cli_concepts.register(sub)
+    cli_drafts.register(sub)
 
     sub.add_parser("ui", help="open the Streamlit interface").set_defaults(func=cmd_ui)
     return parser
