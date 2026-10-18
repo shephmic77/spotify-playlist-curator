@@ -21,6 +21,9 @@ from playlist_curator.crate.inventory import (
     playlist_table,
     summarize,
 )
+from playlist_curator.curator.analysis import analyze
+from playlist_curator.metadata.descriptors import coverage, enrich
+from playlist_curator.metadata.providers import LastfmProvider, MusicBrainzProvider
 from playlist_curator.spotify.auth import AuthError, TokenManager, TokenStore, login
 from playlist_curator.spotify.client import SpotifyAPIError, SpotifyClient
 from playlist_curator.storage.database import Database, purge_data
@@ -357,6 +360,124 @@ def cmd_local_files(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+ATTRIBUTION = (
+    "Tag data from MusicBrainz (musicbrainz.org) and Last.fm (www.last.fm), "
+    "used for personal, non-commercial purposes."
+)
+
+
+def cmd_enrich(settings: Settings, args: argparse.Namespace) -> int:
+    db = _open_db(settings)
+    if db is None:
+        return 1
+    providers = []
+    with db:
+        # Last.fm first: it's faster (no 1 request/second cap) and gives the richer mood/genre
+        # tags, so a partial run is already useful.
+        if args.source in ("all", "lastfm"):
+            if settings.lastfm_api_key:
+                providers.append(
+                    LastfmProvider(db, LastfmProvider.make_http(), settings.lastfm_api_key)
+                )
+            elif args.source == "lastfm":
+                print("LASTFM_API_KEY is not set in .env", file=sys.stderr)
+                return 1
+            else:
+                print("No LASTFM_API_KEY in .env; using MusicBrainz only.")
+        if args.source in ("all", "musicbrainz"):
+            providers.append(
+                MusicBrainzProvider(db, MusicBrainzProvider.make_http(settings.musicbrainz_contact))
+            )
+        try:
+            stats = enrich(db, providers, limit=args.limit, refresh=args.refresh, progress=print)
+        except KeyboardInterrupt:
+            print("\nStopped. Everything fetched so far is saved; run again to continue.")
+            return 130
+        print()
+        for st in stats:
+            line = (
+                f"{st.provider}: {st.found} of {st.recordings} recordings have tags "
+                f"({st.from_cache} from cache, {st.requests} new requests)"
+            )
+            print(line)
+            if st.stopped_early:
+                print(f"  stopped early: {st.stopped_early}")
+        cov = coverage(db)
+        print(
+            f"\nCoverage: {cov['with_any_tags']}/{cov['recordings']} recordings tagged, "
+            f"{cov['with_song_level_tags']} with song-level tags, "
+            f"{cov['with_first_release_year']} with an original release year."
+        )
+        print(ATTRIBUTION)
+    return 0 if all(not s.stopped_early for s in stats) else 2
+
+
+def _pct(x: float) -> str:
+    return f"{round(100 * x)}%"
+
+
+def cmd_analyze(settings: Settings, args: argparse.Namespace) -> int:
+    db = _open_db(settings)
+    if db is None:
+        return 1
+    with db:
+        report = analyze(db)
+    if args.json:
+        print(report.to_json())
+        return 0
+    if report.crate_tagged == 0:
+        print("No tags yet, so only size/era/overlap are shown. Run: curator enrich\n")
+    plist = report.playlists
+    if args.playlist:
+        plist = [p for p in plist if args.playlist.lower() in p.name.lower()]
+        if not plist:
+            print(f"No imported playlist matches {args.playlist!r}")
+            return 1
+    for p in plist:
+        print(f"\n=== {p.name}  ({p.songs} songs, {_pct(p.liked_share)} liked) ===")
+        if p.first_added:
+            print(f"  added {p.first_added} → {p.last_added}")
+        if p.year_median:
+            dec = ", ".join(f"{d} {_pct(s)}" for d, s in p.decades)
+            print(f"  era: median {p.year_median} (10–90%: {p.year_p10}–{p.year_p90}); {dec}")
+        if p.top_artists:
+            arts = ", ".join(f"{a} {_pct(s)}" for a, s in p.top_artists)
+            print(f"  artists: {p.unique_artists} unique; top: {arts}")
+        print(f"  tagged songs: {p.tagged}/{p.songs}")
+        if p.top_tags:
+            tags = ", ".join(f"{t['tag']} ({_pct(t['support'])}, ×{t['lift']})" for t in p.top_tags)
+            print(f"  sound: {tags}")
+        if p.cohesion is not None:
+            print(f"  cohesion: {p.cohesion:.2f}", end="")
+            if p.drift_similarity is not None:
+                print(f"   early-vs-late similarity: {p.drift_similarity:.2f}", end="")
+            print()
+        if p.outliers:
+            print("  least like the rest:")
+            for o in p.outliers[: args.outliers]:
+                print(f"    - {o.title} — {o.artists}  ({o.similarity:.2f})")
+        for f in p.flags:
+            print(f"  ! {f}")
+    if report.pairs and not args.playlist:
+        print("\n=== Overlapping playlists ===")
+        for pr in report.pairs:
+            psim = (
+                f", sound similarity {pr.profile_similarity:.2f}" if pr.profile_similarity else ""
+            )
+            print(
+                f"  {pr.a}  ↔  {pr.b}: {pr.shared_songs} shared, "
+                f"{_pct(pr.containment)} of the smaller{psim} — {pr.flag}"
+            )
+    print(
+        "\nHow to read this: 'sound' lists tags common in the playlist (share of its songs) "
+        "and how much more common than in your whole library (×). Cohesion and similarity run "
+        "0–1 and are heuristics, not probabilities."
+    )
+    if report.crate_tagged:
+        print(ATTRIBUTION)
+    return 0
+
+
 def cmd_purge(settings: Settings, args: argparse.Namespace) -> int:
     if not args.yes:
         answer = input(
@@ -437,6 +558,18 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("local-files", help="local files and their matches").set_defaults(
         func=cmd_local_files
     )
+
+    p = sub.add_parser("enrich", help="fetch tags from MusicBrainz and Last.fm")
+    p.add_argument("--source", choices=["all", "musicbrainz", "lastfm"], default="all")
+    p.add_argument("--limit", type=int, help="only the first N recordings (for a quick test)")
+    p.add_argument("--refresh", action="store_true", help="ignore cached results")
+    p.set_defaults(func=cmd_enrich)
+
+    p = sub.add_parser("analyze", help="report on your existing playlists")
+    p.add_argument("--playlist", help="only playlists whose name contains this")
+    p.add_argument("--outliers", type=int, default=5, help="misfits to show per playlist")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_analyze)
 
     sub.add_parser("ui", help="open the Streamlit interface").set_defaults(func=cmd_ui)
     return parser

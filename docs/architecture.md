@@ -23,6 +23,12 @@ src/playlist_curator/
     importer.py        Fetch Liked Songs + playlists, then write in one transaction
     deduplication.py   Group URIs into recordings; suggestions; user decisions
     inventory.py       Read-only summaries and tables for CLI/UI
+  metadata/
+    tags.py            Tag cleaning and weighting
+    providers.py       MusicBrainz + Last.fm clients, rate limits, cache
+    descriptors.py     Per-recording descriptors from the cache; `enrich` runner
+  curator/
+    analysis.py        Existing-playlist report: profile, cohesion, outliers, drift, overlap
   storage/
     database.py        SQLite schema, migrations, queries, purge
   cli.py               `curator` command
@@ -33,7 +39,6 @@ tests/
 ```
 
 Planned modules (not yet present, created when their phase starts so nothing is a stub):
-`metadata/providers.py`, `metadata/matching.py` (3),
 `curator/playlist_discovery.py`, `classification.py`, `scoring.py` (3–4), `feedback.py` (5),
 `spotify/sync.py` (6), `curator/maintenance.py`, `scripts/run_sync.py` (7).
 
@@ -53,7 +58,7 @@ SQLite (crate) + metadata providers + user identities/feedback
    ──► review UI ──► approved change set ──► spotify/sync (diff, apply, verify, log)
 ```
 
-## Database (schema v2)
+## Database (schema v3)
 
 | Table | Purpose |
 |---|---|
@@ -66,6 +71,7 @@ SQLite (crate) + metadata providers + user identities/feedback
 | `recording_members` | *derived* — which URIs belong to which recording, and why (`self`, `isrc`, `accepted`) |
 | `dedup_suggestions` | *derived* — pending possible matches (`title_match`, `local_match`) |
 | `dedup_decisions` | **user data** — `same` / `different` per URI pair; never rebuilt, survives tracks leaving |
+| `metadata_cache` | trimmed MusicBrainz / Last.fm responses keyed by provider + lookup key, with expiry. Descriptors are computed from it on demand |
 
 Tracks stay keyed by URI. Recordings are a layer on top, rebuilt from tracks + decisions, so
 every merge is reversible and auditable.

@@ -83,3 +83,51 @@ def test_duplicates_review_list_undo_and_local_files(env, client, monkeypatch, c
     decision_id = out.split()[0]
     assert cli.main(["duplicates", "undo", decision_id]) == 0
     assert cli.main(["duplicates", "same", "zzzzzzzz"]) == 1
+
+
+def test_enrich_and_analyze_commands(env, client, monkeypatch, capsys):
+    from fake_metadata import FakeMetadataAPIs
+    from playlist_curator.metadata import providers as prov
+
+    apis = FakeMetadataAPIs()
+    monkeypatch.setattr(cli, "_client", lambda settings: client)
+    monkeypatch.setenv("LASTFM_API_KEY", "KEY")
+
+    class FastMB(prov.MusicBrainzProvider):
+        def __init__(self, db, http, **kw):
+            super().__init__(db, apis.http(), min_interval=0)
+
+    class FastLFM(prov.LastfmProvider):
+        def __init__(self, db, http, key, **kw):
+            super().__init__(db, apis.http(), key, min_interval=0)
+
+    monkeypatch.setattr(cli, "MusicBrainzProvider", FastMB)
+    monkeypatch.setattr(cli, "LastfmProvider", FastLFM)
+
+    assert cli.main(["import"]) == 0
+    capsys.readouterr()
+    assert cli.main(["analyze"]) == 0
+    assert "No tags yet" in capsys.readouterr().out
+
+    assert cli.main(["enrich"]) == 0
+    out = capsys.readouterr().out
+    assert "musicbrainz: 3 of 10 recordings have tags" in out
+    assert "Coverage:" in out and "Last.fm" in out
+
+    assert cli.main(["analyze"]) == 0
+    out = capsys.readouterr().out
+    assert "=== 80s" in out and "tagged songs:" in out
+    # the 4-song fixture playlists are too small for a sound profile; say so instead
+    assert "too few tagged songs" in out
+    assert "Overlapping playlists" in out
+    assert cli.main(["analyze", "--playlist", "nothing-like-this"]) == 1
+    assert cli.main(["analyze", "--json"]) == 0
+
+
+def test_enrich_without_lastfm_key_uses_musicbrainz_only(env, client, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_client", lambda settings: client)
+    monkeypatch.delenv("LASTFM_API_KEY", raising=False)
+    assert cli.main(["import"]) == 0
+    capsys.readouterr()
+    assert cli.main(["enrich", "--source", "lastfm"]) == 1
+    assert "LASTFM_API_KEY" in capsys.readouterr().err

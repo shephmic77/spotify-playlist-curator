@@ -23,6 +23,7 @@ WRITE_SCOPES: tuple[str, ...] = (
 )
 
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8888/callback"
+DEFAULT_MB_CONTACT = "https://github.com/shephmic77/spotify-playlist-curator"
 
 
 class ConfigError(RuntimeError):
@@ -36,6 +37,9 @@ class Settings:
     data_dir: Path = field(default_factory=lambda: Path("data"))
     scopes: tuple[str, ...] = READ_SCOPES
     log_level: str = "INFO"
+    lastfm_api_key: str = ""
+    # MusicBrainz requires a contact (URL or email) in the User-Agent of every request.
+    musicbrainz_contact: str = DEFAULT_MB_CONTACT
 
     @property
     def db_path(self) -> Path:
@@ -70,6 +74,9 @@ def load_settings(env_file: str | os.PathLike[str] | None = ".env") -> Settings:
         redirect_uri=os.environ.get("SPOTIFY_REDIRECT_URI", DEFAULT_REDIRECT_URI).strip(),
         data_dir=Path(os.environ.get("CURATOR_DATA_DIR", "data")).expanduser(),
         log_level=os.environ.get("CURATOR_LOG_LEVEL", "INFO").upper(),
+        lastfm_api_key=os.environ.get("LASTFM_API_KEY", "").strip(),
+        musicbrainz_contact=os.environ.get("MUSICBRAINZ_CONTACT", DEFAULT_MB_CONTACT).strip()
+        or DEFAULT_MB_CONTACT,
     )
 
 

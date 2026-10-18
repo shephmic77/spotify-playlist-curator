@@ -104,8 +104,9 @@ Paraphrased; read the originals.
    This is broad. Phase 1 only stores and counts your own library to show it back to you.
    Phases 3–4 score songs against playlist identities you write, using your approved
    examples, your feedback, and independently sourced metadata. Whether that counts as
-   "analyzing Spotify Content" is a judgment call. **It needs a decision from the project owner
-   before Phase 3 starts.** Lower-risk options are listed in `data_sources.md`.
+   "analyzing Spotify Content" is a judgment call. **Decided 2026-10-17: the owner chose
+   option 2 in `data_sources.md`** (per-song ISRC / artist + title lookups to MusicBrainz and
+   Last.fm; scoring works on their tags).
 3. **Store only what is needed and not indefinitely; delete on disconnect** (Terms IV.3, V.7–8).
    → Tracks no longer in any source are deleted on each import; `curator purge` removes everything.
 4. **Don't transfer Spotify data to other services** except a user's own data/playlist metadata

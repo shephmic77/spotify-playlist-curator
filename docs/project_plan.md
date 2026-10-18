@@ -31,20 +31,29 @@ Delivered:
 Not verified here: the Streamlit tabs (Streamlit can't be installed in the build sandbox);
 the logic behind them is covered by tests.
 
-## Phase 3 — Playlist understanding (decision needed first)
+## Phase 3a — Descriptors and existing-playlist analysis ✅ (2026-10-18)
 
-Before starting, the owner decides how to treat Spotify Policy III.13 ("do not analyze Spotify
-Content"). See `spotify_api.md` and `data_sources.md`. Proposed scope:
+Owner chose option 2 (`data_sources.md`). Delivered:
+- MusicBrainz (ISRC → recording tags, artist tags, first-release year) and Last.fm (track and
+  artist top tags) providers with rate limiting, retries, and a trimmed local cache.
+- Tag cleaning and per-recording descriptors (song-level vs. discounted artist-level).
+- `curator enrich` (resumable) and `curator analyze`; Playlist analysis tab in the UI.
+- Report per playlist: size, liked share, added dates, original-era spread, artist
+  concentration, distinguishing tags (support × lift), cohesion, outliers, early-vs-late
+  drift, plain-language flags; and overlapping/redundant playlist pairs.
+- 128 tests.
 
-- Old-playlist report from data we're allowed to show back: size, staleness (last added_at),
-  overlap matrix (Jaccard between playlists), release-year spread, artist concentration.
-  This surfaces drift and redundancy without any descriptor guessing.
-- Playlist **identity editor**: concept, qualifying traits, disqualifying traits, exceptions,
-  neighbors, plus approved reference songs and explicit exclusions.
-- Independent descriptors (if approved): MusicBrainz tags/genres, Last.fm tags, user tags.
-  Each descriptor keeps its source and is optional.
-- Concept proposals: seeded from old playlists and from clusters in *descriptor* space; each
-  proposal carries the evidence behind it, and the owner approves/edits/rejects.
+Not verified here: live calls to MusicBrainz/Last.fm (not reachable from the build sandbox;
+covered by mocked tests) and the Streamlit tab.
+
+## Phase 3b — Playlist identities and proposals (next)
+
+- Playlist identity model and editor: concept, qualifying/disqualifying tags and eras,
+  exceptions, neighbors, reference songs, exclusions.
+- Proposed collection: start from old playlists worth keeping (cohesive, not redundant),
+  suggest splits for broad/drifted ones and merges for redundant pairs, and suggest new
+  concepts from tag clusters in the crate. Every proposal carries its evidence; you approve,
+  edit or reject. Nothing is written to Spotify.
 
 ## Phase 4 — Classification and curation
 

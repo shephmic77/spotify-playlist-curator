@@ -261,3 +261,15 @@ def test_v1_database_upgrades_and_backfills_recordings(tmp_path, fake, client):
         db.conn.execute("DELETE FROM recording_members")  # simulate stale derived data
         dd.ensure_current(db)
         assert summarize(db).unique_recordings == 10
+
+
+def test_dated_version_label_warns_about_possible_rerecording():
+    tracks = [
+        track("spotify:track:a", "Crazy Train", "Ozzy Osbourne", isrc="A1", ms=293_000),
+        track(
+            "spotify:track:b", "Crazy Train - 2002 Version", "Ozzy Osbourne", isrc="A2", ms=289_000
+        ),
+    ]
+    recs = dd.group_recordings(tracks, {})
+    (s,) = dd.find_suggestions(recs, tracks, {})
+    assert "re-recorded" in s.reason

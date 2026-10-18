@@ -143,6 +143,21 @@ MIGRATIONS: list[str] = [
         decided_at TEXT NOT NULL
     );
     """,
+    # v3 - Phase 3: cache of independent descriptors (MusicBrainz, Last.fm)
+    """
+    -- Trimmed responses from external providers, keyed by what was asked. Descriptors are
+    -- derived from this on demand, so recordings can be regrouped without refetching.
+    CREATE TABLE metadata_cache (
+        provider     TEXT NOT NULL,
+        lookup_key   TEXT NOT NULL,
+        -- ok | not_found
+        status       TEXT NOT NULL,
+        payload_json TEXT,
+        fetched_at   TEXT NOT NULL,
+        expires_at   TEXT NOT NULL,
+        PRIMARY KEY (provider, lookup_key)
+    );
+    """,
 ]
 
 

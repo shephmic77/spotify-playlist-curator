@@ -14,7 +14,8 @@ or deletes your original playlists.
 |---|---|---|
 | 1 | Spotify connection, Liked Songs + playlist import, inventory | **Done** |
 | 2 | Master Music Crate: recording-level dedup, provenance, local files | **Done** |
-| 3 | Playlist understanding and concept proposals | Planned (policy decision needed, see below) |
+| 3a | Tags from MusicBrainz + Last.fm; analysis of your existing playlists | **Done** |
+| 3b | Playlist identities and proposed playlist collection | Next |
 | 4 | Multi-label scoring and draft playlists | Planned |
 | 5 | Feedback and personalization | Planned |
 | 6 | Creating playlists in Spotify (preview → approve → write, rollback) | Planned |
@@ -40,6 +41,12 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
   near-matches (e.g. a remaster with a new ISRC) and local files that look like catalog songs are
   *suggested* for you to confirm. Live, remix, edit, acoustic, sped-up and similar versions are
   never treated as duplicates. Your decisions are kept permanently and override the ISRC rule.
+
+- **Tags from MusicBrainz and Last.fm** (Phase 3a, `curator enrich`): genre, era and mood tags
+  for each song, fetched one song at a time within each service's rate limits and cached.
+- **Analysis of your existing playlists** (`curator analyze`): each playlist's sound and era,
+  cohesion, songs that don't fit, drift between early and later additions, staleness, and
+  overlapping or redundant playlists.
 
 ## Important limitations (from Spotify, not this app)
 
@@ -101,6 +108,8 @@ curator import              # reads Liked Songs + playlists into data/curator.sq
 curator inventory           # summary of your crate
 curator playlists           # which playlists were read, and which Spotify withheld
 curator duplicates review   # confirm or reject suggested duplicate matches
+curator enrich              # fetch tags (first run ~30-40 min; cached after that)
+curator analyze             # report on your existing playlists
 curator ui                  # Streamlit interface at http://localhost:8501
 ```
 
@@ -108,6 +117,13 @@ If the browser can't reach the local callback (WSL, SSH, port in use), use
 `curator auth login --manual` and paste the URL you were redirected to.
 
 Re-run `curator import` any time. Only changed playlists are re-read; use `--force` to re-read all.
+
+### Optional: Last.fm tags
+
+MusicBrainz needs no key. For Last.fm (better mood/genre tags), create a free API key at
+<https://www.last.fm/api/account/create> and add `LASTFM_API_KEY=...` to `.env`. Without it,
+`curator enrich` uses MusicBrainz only. You can add the key later and run `enrich` again;
+only missing lookups are fetched.
 
 ### Other commands
 
@@ -134,7 +150,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 90 tests; Spotify is mocked, no network or credentials needed
+pytest            # 128 tests; Spotify, MusicBrainz and Last.fm are mocked
 ruff check . && ruff format --check .
 ```
 
@@ -143,5 +159,9 @@ Architecture: [docs/architecture.md](docs/architecture.md).
 
 ## Privacy
 
-Everything is stored locally in `data/`. Nothing is sent anywhere except Spotify's own API.
+Everything is stored locally in `data/`. Besides Spotify's own API, the only outside requests
+are per-song tag lookups: an ISRC to MusicBrainz, and artist + title to Last.fm (if you set a key).
 No Spotify data is sent to any AI model by this application.
+
+Tag data comes from [MusicBrainz](https://musicbrainz.org) and [Last.fm](https://www.last.fm)
+and is used for personal, non-commercial purposes.

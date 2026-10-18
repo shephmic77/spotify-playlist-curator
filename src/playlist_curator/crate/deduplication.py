@@ -387,6 +387,11 @@ def find_suggestions(
                 reason += f"; length differs by {gap:.0f}s" if gap is not None else ""
                 if editions:
                     reason += f"; edition labels differ ({', '.join(sorted(editions))})"
+                if any(re.search(r"\b(19|20)\d\d\s+version\b", e, re.I) for e in editions):
+                    reason += (
+                        "; a dated 'Version' label can mean the song was re-recorded, "
+                        "so listen before merging"
+                    )
                 out.append(Suggestion(a.uri, b.uri, "title_match", strength, reason))
 
     # Local file vs catalog recordings.
@@ -559,3 +564,8 @@ def resolve_suggestion(db: Database, short: str) -> tuple[str, str]:
     if len(matches) > 1:
         raise KeyError(f"Id {short!r} is ambiguous; use more characters")
     return matches[0]
+
+
+def classify_qualifier(qualifier: str) -> tuple[str, str | None]:
+    """Public wrapper: category (feat/noise/edition/version/unknown) of a title qualifier."""
+    return _classify(qualifier)

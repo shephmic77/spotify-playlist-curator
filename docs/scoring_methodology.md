@@ -1,7 +1,7 @@
-# Scoring methodology (design; implementation starts in Phase 4)
+# Scoring methodology
 
-Nothing in this document is implemented yet. It fixes the design so Phases 2–3 collect the right
-data.
+The existing-playlist analysis (Phase 3a) is implemented; scoring of new playlists (Phase 4) is
+still a design.
 
 ## Goals
 
@@ -80,3 +80,25 @@ there are enough feedback decisions, and only then may it be called a probabilit
 
 Feedback edits rules, reference sets, and weights for one playlist. A rejection in playlist A
 never affects playlist B. No model is trained on Spotify data.
+
+
+## Existing-playlist analysis (implemented, `curator/analysis.py`)
+
+Vectors are per-recording combined tag weights (`data_sources.md`). Untagged songs are excluded
+from tag measures and counted separately.
+
+| Measure | Definition |
+|---|---|
+| Profile | mean tag vector of the playlist's tagged songs (needs ≥ 5 tagged) |
+| Support of a tag | share of tagged songs with weight ≥ 0.3 for it |
+| Lift | mean weight in playlist ÷ mean weight across the whole crate |
+| Distinguishing tags | support ≥ 0.25, ranked by support × log2(1 + lift) |
+| Cohesion | mean cosine similarity of songs to the profile (0–1) |
+| Outliers | songs below max(0.15, cohesion − 2·sd), lowest first, ≤ 10 |
+| Drift | cosine between profiles of the first and second half of songs by date added (≥ 20 dated, tagged songs) |
+| Overlap | Jaccard and containment (shared ÷ smaller) of recording sets; profile cosine |
+
+Flags (heuristic thresholds, not calibrated): fewer than 8 songs; nothing added in 365 days;
+cohesion < 0.30 (broad/mixed); drift similarity < 0.60; containment ≥ 0.6, Jaccard ≥ 0.4, or
+profile cosine ≥ 0.90 between playlists. These thresholds will be revisited against your
+feedback in Phase 5.

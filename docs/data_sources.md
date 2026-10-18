@@ -1,43 +1,61 @@
 # Data sources
 
-Status: **Phase 1 uses only the Spotify Web API.** Everything below "Candidates" is a plan to
-be verified (availability, licence, rate limits, terms) at the start of Phase 3. Nothing here
-has been integrated yet.
+## Decision (2026-10-17)
+
+Spotify Policy III.13 prohibits analyzing Spotify Content "for any purpose", and III.9 limits
+transferring data to other services. Three options were considered:
+
+1. User input only (no external lookups).
+2. **Plus identifier lookups** — send individual ISRCs (MusicBrainz) or artist + title (Last.fm)
+   to fetch *their* independently produced descriptors; scoring operates on those.
+3. Plus local audio analysis of files the owner has rights to.
+
+**The project owner chose option 2.** Option 3 is not planned.
 
 ## In use
 
-| Source | Data | Notes |
-|---|---|---|
-| Spotify Web API | Your Liked Songs, your readable playlists, track name/artists/album, release date + precision, duration, explicit, ISRC, local-file flag | Stored locally only as long as needed; see `spotify_api.md` |
+| Source | Data | What we send | Limits honoured | Stored |
+|---|---|---|---|---|
+| Spotify Web API | Liked Songs, readable playlists, track name/artists/album, release date + precision, duration, ISRC, local-file flag | — | see `spotify_api.md` | tables `tracks`, `source_entries`, `playlists` |
+| MusicBrainz (`/ws/2/isrc/{isrc}`, `/ws/2/artist/{mbid}`) | Recording + artist community tags and genres, recording first-release date, MusicBrainz ids | one ISRC per request; artist MBID | ≤ 1 request / 1.1 s; `User-Agent: PlaylistCurator/<ver> ( <contact> )`; 503 → back off | trimmed: tag names + counts, first-release date, ids. Refreshed after 90 days |
+| Last.fm (`track.getTopTags`, `artist.getTopTags`) | Track and artist top tags | artist name + cleaned title; artist name | API key required (`LASTFM_API_KEY`); non-commercial use; ≤ 4 requests/s; error 29 → back off; HTTP `Cache-Control` honoured | top ≤ 40 tag names + counts per lookup (well under the 100 MB cap). Refreshed per `Cache-Control`, else 30 days |
 
-## Your own input (always allowed, highest priority)
+Attribution: the CLI (`enrich`, `analyze`) and the UI's Playlist analysis tab credit
+MusicBrainz and Last.fm with links.
+
+Licensing notes: MusicBrainz core data is CC0; other parts of its database are released under a
+Creative Commons licence (see musicbrainz.org/doc/About/Data_License; this project hasn't
+confirmed which part tags fall into). Personal, non-commercial use fits either. Last.fm data
+is used under its API Terms (non-commercial, attribution, 100 MB cap).
+
+## How descriptors are built
+
+- Tags are normalized (`metadata/tags.py`): lowercase, aliases (hip-hop → hip hop, synth-pop →
+  synthpop), decades unified ("1980s", "80's", "eighties" → 80s), and tagger-centric tags dropped
+  ("seen live", "favorites", "under 2000 listeners", the artist's own name).
+- Each source's counts are scaled to 0–1 against its strongest tag; tags under 0.1 are dropped.
+- Per recording: `combined = max(song-level weight, 0.6 × artist-level weight)`. Song-level
+  sources: Last.fm track tags, MusicBrainz recording tags. Artist-level: Last.fm and MusicBrainz
+  artist tags.
+- Original release year = earliest of MusicBrainz first-release year and Spotify release year
+  (compilations and remasters otherwise make old songs look new).
+- No tag is ever inferred. A song with no tags is "untagged" and excluded from tag-based measures.
+
+Descriptors are derived from the cache on demand, so merging/splitting recordings never
+triggers new requests.
+
+## Your own input (Phase 3b onward, highest priority)
 
 - Playlist identity text you write (concept, qualifies, disqualifies, exceptions, neighbors).
 - Reference songs you approve per playlist and explicit exclusions.
-- Tags you assign to songs or artists ("80s sound", "night drive", "late-night piano").
+- Tags you assign to songs or artists ("80s sound", "night drive").
 - Accept/reject/essential feedback.
 
-These carry most of the weight in scoring. They are the only way to capture subjective
-categories like "sounds like the 80s but is from 2013".
+These outrank external tags. They're the only way to capture subjective categories like
+"sounds like the 80s but is from 2013".
 
-## Candidates for independent descriptors (to verify in Phase 3)
+## Not used
 
-| Source | What it might give | Things to verify |
-|---|---|---|
-| MusicBrainz | Recording ↔ ISRC links, artist relationships, community tags/genres, first-release dates (useful for "era of the original recording" vs. a remaster's date) | Licence of tags vs. core data; 1 request/second guideline and required User-Agent; coverage for your library |
-| Last.fm API | Track/artist top tags (often mood/genre-like: "chillout", "synthwave") | API terms (non-commercial use, attribution, caching rules); tag noise |
-| Your local audio files | Tempo/loudness/spectral features from files you hold rights to (e.g. via librosa) | Only for files you supply; never Spotify audio |
-| AcousticBrainz dumps | Precomputed audio descriptors keyed by MusicBrainz ID | Project stopped collecting data in 2022; static dumps only; coverage gaps for newer music |
-
-## Decision required before Phase 3
-
-Spotify Policy III.13 prohibits analyzing Spotify Content "for any purpose", and III.9 limits
-transferring data to other services. Options, from most to least conservative:
-
-1. **User-input only:** scoring uses only your identities, tags, reference songs, and feedback,
-   plus release dates shown back to you. No external lookups.
-2. **Plus identifier lookups:** send individual ISRCs (or artist + title) to MusicBrainz/Last.fm
-   to fetch *their* independently produced descriptors; scoring operates on those.
-3. **Plus local audio analysis** of files you own.
-
-The plan assumes option 2 unless you decide otherwise. It's your account and your call.
+- Spotify audio features / analysis / recommendations (unavailable to new apps, and Spotify
+  content may not go into ML models).
+- AcousticBrainz (stopped collecting in 2022) and local audio analysis (option 3 not chosen).

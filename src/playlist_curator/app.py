@@ -26,6 +26,7 @@ from playlist_curator.crate.inventory import (
     summarize,
     track_table,
 )
+from playlist_curator.curator.analysis import analyze
 from playlist_curator.spotify.auth import AuthError, TokenManager, TokenStore
 from playlist_curator.spotify.client import SpotifyAPIError, SpotifyClient
 from playlist_curator.storage.database import Database
@@ -98,6 +99,7 @@ with Database(settings.db_path) as db:
     decisions = decisions_table(db)
     local_files = pd.DataFrame(local_files_table(db))
     runs = db.last_runs(20)
+    report = analyze(db)
 
 st.title("Library")
 
@@ -124,8 +126,9 @@ c[4].metric(
 )
 st.caption("Unassigned songs will appear here once playlist assignment exists (Phase 4).")
 
-tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = st.tabs(
+tab_analysis, tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = st.tabs(
     [
+        "Playlist analysis",
         "Songs",
         f"Duplicates ({len(suggestions)} to review)",
         "Local files",
@@ -133,6 +136,86 @@ tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = st.tabs(
         "Import history",
     ]
 )
+
+with tab_analysis:
+    st.caption(
+        f"{report.crate_tagged} of {report.crate_recordings} songs have tags. "
+        "Run `curator enrich` to fetch more. Cohesion and similarity run 0–1 and are "
+        "heuristics, not probabilities."
+    )
+    if report.crate_tagged:
+        st.caption(
+            "Tag data from [MusicBrainz](https://musicbrainz.org) and "
+            "[Last.fm](https://www.last.fm), used for personal, non-commercial purposes."
+        )
+    rows = [
+        {
+            "playlist": p.name,
+            "songs": p.songs,
+            "liked": f"{round(100 * p.liked_share)}%",
+            "era (median)": p.year_median,
+            "tagged": p.tagged,
+            "cohesion": p.cohesion,
+            "early vs late": p.drift_similarity,
+            "last added": p.last_added,
+            "flags": len(p.flags),
+        }
+        for p in report.playlists
+    ]
+    if rows:
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    for p in report.playlists:
+        with st.expander(f"{p.name}  ·  {p.songs} songs  ·  {len(p.flags)} flag(s)"):
+            if p.top_tags:
+                st.markdown(
+                    "**Sound:** "
+                    + ", ".join(
+                        f"{t['tag']} ({round(100 * t['support'])}%, ×{t['lift']})"
+                        for t in p.top_tags
+                    )
+                )
+            if p.year_median:
+                st.markdown(
+                    f"**Era:** median {p.year_median} ({p.year_p10}–{p.year_p90}); "
+                    + ", ".join(f"{d} {round(100 * x)}%" for d, x in p.decades)
+                )
+            if p.top_artists:
+                st.markdown(
+                    f"**Artists:** {p.unique_artists} unique; top "
+                    + ", ".join(f"{a} {round(100 * x)}%" for a, x in p.top_artists)
+                )
+            for f in p.flags:
+                st.warning(f)
+            if p.outliers:
+                st.markdown("**Least like the rest of the playlist**")
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {"song": o.title, "artists": o.artists, "similarity": o.similarity}
+                            for o in p.outliers
+                        ]
+                    ),
+                    hide_index=True,
+                )
+    if report.pairs:
+        st.subheader("Overlapping playlists")
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "a": x.a,
+                        "b": x.b,
+                        "shared songs": x.shared_songs,
+                        "share of smaller": x.containment,
+                        "sound similarity": x.profile_similarity,
+                        "why": x.flag,
+                    }
+                    for x in report.pairs
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
 
 with tab_songs:
     if tracks.empty:

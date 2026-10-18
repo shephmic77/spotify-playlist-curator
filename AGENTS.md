@@ -54,6 +54,13 @@ swapped without touching scoring, and so scoring can be tested with fixtures alo
 
 Re-verify against docs/spotify_api.md links before adding endpoints.
 
+## External descriptor sources (Phase 3, owner chose option 2 in docs/data_sources.md)
+
+- MusicBrainz: ≤ 1 request / 1.1 s, `User-Agent: PlaylistCurator/<ver> ( <contact> )`.
+- Last.fm: needs `LASTFM_API_KEY`; non-commercial; credit Last.fm wherever its data is shown.
+- Send one identifier per request (ISRC, or artist + title). Never bulk-export the library.
+- Cache trimmed responses only (tag names + counts). Missing tags stay missing.
+
 ## Conventions
 
 - Python 3.12+, type hints on public functions, `ruff check` + `ruff format` clean.
@@ -76,5 +83,6 @@ Re-verify against docs/spotify_api.md links before adding endpoints.
 pip install -e ".[ui,dev]"
 pytest
 ruff check . && ruff format --check .
-curator auth login | import | inventory | playlists | duplicates ... | local-files | ui | purge
+curator auth login | import | inventory | playlists | duplicates ... | local-files
+curator enrich | analyze | ui | purge
 ```
