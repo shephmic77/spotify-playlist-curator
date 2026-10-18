@@ -73,3 +73,32 @@ def test_draft_needs_playlists_and_claude_needs_a_key(env, capsys):
     assert cli.main(["drafts"]) == 1
     assert cli.main(["describe", "study", "--engine", "claude"]) == 1
     assert "ANTHROPIC_API_KEY" in capsys.readouterr().err
+
+
+def test_review_feedback_decisions_stats(env, capsys, monkeypatch):
+    assert (
+        cli.main(["describe", "chill indie", "--like", "chill artist 1", "--create", "Chill"]) == 0
+    )
+    assert cli.main(["draft"]) == 0
+    capsys.readouterr()
+
+    answers = iter(["x", "k", "r", "e", "u", "s", "q"])
+    monkeypatch.setattr("builtins.input", lambda _p: next(answers))
+    assert cli.main(["review", "Chill", "--all"]) == 0
+    out = capsys.readouterr().out
+    assert "[k]eep" in out and "Saved: 1 keep, 1 reject, 1 essential, 1 uncertain" in out
+
+    assert cli.main(["feedback", "Chill", "reject", "Jazz Song 3", "Nope Song"]) == 1
+    out = capsys.readouterr().out
+    assert "reject: Jazz Song 3" in out and "! No song called 'Nope Song'" in out
+    assert cli.main(["feedback", "Chill", "undo", "Jazz Song 3"]) == 0
+    assert "undone: Jazz Song 3" in capsys.readouterr().out
+
+    assert cli.main(["decisions", "Chill"]) == 0
+    assert "keep" in capsys.readouterr().out
+    assert cli.main(["draft"]) == 0
+    assert "Decide song by song" in capsys.readouterr().out
+    assert cli.main(["stats", "--evaluate"]) == 0
+    out = capsys.readouterr().out
+    assert "accept%" in out and "holdout" in out and "Chill" in out
+    assert cli.main(["review", "Nobody"]) == 1

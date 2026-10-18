@@ -1,6 +1,6 @@
 # Scoring methodology
 
-Implemented: existing-playlist analysis (3a), proposals (3b), and draft scoring (4,
+Implemented: existing-playlist analysis (3a), proposals (3b), draft scoring (4) and feedback (5,
 `curator/scoring.py`, summarised at the end of this file). The design sections below are the
 original plan; where they differ, the "implemented" sections are authoritative.
 
@@ -149,3 +149,24 @@ returns the same JSON shape, validated and clamped. Examples you name are resolv
 (artist exact match incl. split credits, then song title exact / prefix / fuzzy ≥ 0.85); tags
 shared by ≥ 50 % of examples are added at 0.8 × support. Grounding reports how many library
 songs carry each tag and suggests close library tags for misses.
+
+
+## Feedback (implemented, `curator/feedback.py`)
+
+Per playlist only. keep → example song (role `reference`); reject → `exclude`; essential →
+`essential`; uncertain → recorded, nothing changes; undo → restores the role the song had
+before any feedback. Manual decisions always beat scores.
+
+Effects on scoring:
+- Excluded songs are never included; essential always.
+- Negative examples: if a song's closest rejected song (cosine on idf-weighted vectors) is
+  ≥ 0.85 similar and closer than its closest example, its score × 0.80, with a reason.
+- Stability (entry vs exit bar): songs in the previous draft stay while score ≥ threshold −
+  0.08; new songs need ≥ threshold.
+- Suggested avoid tags: tags on ≥ 50 % of ≥ 3 rejected songs and ≤ 15 % of examples. Shown,
+  never applied automatically.
+
+Metrics: acceptance rate = kept ÷ (kept + rejected) among songs the draft had included;
+manual adds; added/removed per playlist between drafts; holdout agreement = for each keep /
+reject, re-score with that decision hidden and check whether the rules alone agree. These are
+counts and checks, not calibrated probabilities.

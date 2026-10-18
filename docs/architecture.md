@@ -34,8 +34,10 @@ src/playlist_curator/
     identities.py      Playlist identities: concept, tag rules, years, example songs
     describe.py        Your words -> tag recipe (offline dictionary or Claude, text only)
     scoring.py         Phase 4: per-playlist scoring, adaptive thresholds, draft playlists
+    feedback.py        Phase 5: decisions, undo, avoid-tag suggestions, stats, holdout check
   cli_concepts.py      CLI for intents / propose / proposals / identities
   cli_drafts.py        CLI for describe / draft / drafts
+  cli_feedback.py      CLI for review / feedback / decisions / stats
   storage/
     database.py        SQLite schema, migrations, queries, purge
   cli.py               `curator` command
@@ -46,7 +48,6 @@ tests/
 ```
 
 Planned modules (not yet present, created when their phase starts so nothing is a stub):
-`curator/feedback.py` (5),
 `spotify/sync.py` (6), `curator/maintenance.py`, `scripts/run_sync.py` (7).
 
 ## Data flow
@@ -65,7 +66,7 @@ SQLite (crate) + metadata providers + user identities/feedback
    ──► review UI ──► approved change set ──► spotify/sync (diff, apply, verify, log)
 ```
 
-## Database (schema v5)
+## Database (schema v6)
 
 | Table | Purpose |
 |---|---|
@@ -83,6 +84,8 @@ SQLite (crate) + metadata providers + user identities/feedback
 | `identities` | **user data** — approved playlist definitions (name, kind, concept, rules, auto-maintain) |
 | `identity_examples` | **user data** — example / excluded / essential songs per identity, keyed by URI |
 | `draft_runs`, `draft_members` | *derived* — draft playlists from `curator draft` (include / review, scores, reasons); last 5 runs kept |
+| `feedback` | **user data** — latest keep / reject / essential / uncertain per playlist + song, with the prior example role for undo |
+| `feedback_log` | **user data** — append-only history of decisions, for metrics |
 | `metadata_cache` | trimmed MusicBrainz / Last.fm responses keyed by provider + lookup key, with expiry. Descriptors are computed from it on demand |
 
 Tracks stay keyed by URI. Recordings are a layer on top, rebuilt from tracks + decisions, so

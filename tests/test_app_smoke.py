@@ -67,6 +67,13 @@ def _fake_streamlit() -> types.ModuleType:
     st.text_area = lambda label, value="", **k: value
     st.selectbox = lambda label, options, index=0, **k: list(options)[index]
 
+    def data_editor(data, **k):
+        calls.append("data_editor")
+        return data
+
+    st.data_editor = data_editor
+    st.column_config = types.SimpleNamespace(SelectboxColumn=lambda **k: None)
+
     def columns(spec, **k):
         n = spec if isinstance(spec, int) else len(spec)
         return [_Ctx() for _ in range(n)]
@@ -122,5 +129,6 @@ def test_app_renders_every_tab_with_a_library(app_env, monkeypatch):
         monkeypatch.setattr(sc, "load_descriptors", lambda _db: desc)
         sc.build_drafts(db, descriptors=desc)
     runpy.run_path(str(APP), run_name="__main__")
-    assert FAKE_ST.calls.count("dataframe") >= 6  # includes draft overview + two draft tables
+    assert FAKE_ST.calls.count("dataframe") >= 5  # includes draft overview + progress
+    assert FAKE_ST.calls.count("data_editor") >= 1  # editable draft table
     assert "metric" in FAKE_ST.calls

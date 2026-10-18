@@ -72,11 +72,16 @@ Delivered:
   reports, last 5 runs kept. `curator drafts show/unassigned`. Draft playlists UI tab.
 - 176 tests.
 
-## Phase 5 — Feedback
+## Phase 5 — Feedback and personalization ✅ (2026-10-18)
 
-Accept / reject / uncertain / essential / never-in-this-playlist / manual add-remove,
-per-playlist only. Manual decisions override scores permanently. Feedback adjusts
-playlist-specific weights and reference sets. Holdout evaluation of acceptance rate.
+- Decisions per playlist: keep / reject / essential / uncertain / undo (`curator feedback`,
+  interactive `curator review`, editable tables in the Draft playlists tab). Stored locally
+  (`feedback`, `feedback_log`).
+- Scoring respects decisions; rejected songs act as negative examples in that playlist;
+  entry/exit bars for stability; changes between drafts reported.
+- Avoid-tag suggestions from rejection patterns; `curator stats --evaluate` with acceptance
+  rate, manual adds, churn and a holdout agreement check.
+- 189 tests.
 
 ## Phase 6 — Spotify playlist creation
 

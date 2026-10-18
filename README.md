@@ -17,7 +17,8 @@ or deletes your original playlists.
 | 3a | Tags from MusicBrainz + Last.fm; analysis of your existing playlists | **Done** |
 | 3b | Proposals for a new collection (from your descriptions + library clusters); editable playlist definitions | **Done** |
 | 4 | Describe playlists in your own words; score songs into draft playlists with reasons | **Done** |
-| 5 | Feedback: accept / reject / essential per song, learn per playlist | Next |
+| 5 | Feedback: keep / reject / essential per song, learning per playlist, metrics | **Done** |
+| 6 | Create approved playlists in Spotify (preview, approve, write, rollback) | Next |
 | 4 | Multi-label scoring and draft playlists | Planned |
 | 5 | Feedback and personalization | Planned |
 | 6 | Creating playlists in Spotify (preview → approve → write, rollback) | Planned |
@@ -59,6 +60,12 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
 - **Draft playlists** (`curator draft`): every song is scored against every playlist's own
   definition (tags, examples, required/avoided tags, preferred years). Songs can land in
   several playlists or none; each gets a plain-language reason. Nothing goes to Spotify.
+- **Your feedback shapes each playlist** (Phase 5): keep, reject, mark essential or unsure,
+  per playlist (`curator review "Workout"`, or the Draft playlists tab). Kept songs become
+  examples, rejected songs never return and similar songs are scored down in that playlist only,
+  essential songs are always in. Songs already in a draft need less to stay than new songs need
+  to get in, so playlists don't flip-flop. `curator stats --evaluate` shows acceptance rates,
+  changes between drafts and a holdout check.
 - **Analysis of your existing playlists** (`curator analyze`): each playlist's sound and era,
   cohesion, songs that don't fit, drift between early and later additions, staleness, and
   overlapping or redundant playlists.
@@ -134,6 +141,9 @@ curator identities edit "Classical" --require-tag classical   # only songs with 
 curator describe "study music, chill, lyrics ok, not loud" --like Nujabes --create "Study"
 curator draft               # fill every playlist with matching songs (drafts only)
 curator drafts show "Study" --why    ·    curator drafts unassigned
+curator review "Workout"    # k/r/e/u per song (borderline first; --all for everything)
+curator feedback "Workout" reject "Island in the Sun"   # or keep / essential / uncertain / undo
+curator stats --evaluate    # acceptance, rejections, changes, holdout agreement
 curator ui                  # Streamlit interface at http://localhost:8501
 ```
 
@@ -174,7 +184,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 176 tests; Spotify, MusicBrainz and Last.fm are mocked
+pytest            # 189 tests; Spotify, MusicBrainz and Last.fm are mocked
 ruff check . && ruff format --check .
 ```
 

@@ -28,6 +28,7 @@ from playlist_curator.crate.inventory import (
 )
 from playlist_curator.curator import describe as ds
 from playlist_curator.curator import discovery as disc
+from playlist_curator.curator import feedback as fb
 from playlist_curator.curator import identities as idn
 from playlist_curator.curator import intents as it
 from playlist_curator.curator import scoring as sc
@@ -387,10 +388,19 @@ with tab_drafts:
         pick = st.selectbox("Playlist", list(names))
         rows = drafts.get(names[pick], []) if pick else []
 
+        with Database(settings.db_path) as db:
+            uri_of = {
+                r[0]: r[1]
+                for r in db.conn.execute("SELECT recording_id, primary_uri FROM recordings")
+            }
+            current = {d["uri"]: d["decision"] for d in fb.decisions_for(db, names[pick])}
+        choices = ["", "keep", "reject", "essential", "uncertain"]
+
         def table(decision: str) -> pd.DataFrame:
             return pd.DataFrame(
                 [
                     {
+                        "your call": current.get(uri_of.get(r["recording_id"], ""), ""),
                         "score": r["score"],
                         "song": r["title"],
                         "artists": r["artists"],
@@ -398,16 +408,74 @@ with tab_drafts:
                         "like examples": r["example_score"],
                         "evidence": r["evidence"],
                         "why": "; ".join(r["reasons"]),
+                        "uri": uri_of.get(r["recording_id"], ""),
                     }
                     for r in rows
                     if r["decision"] == decision
                 ]
             )
 
-        st.markdown(f"**In the draft** ({sum(r['decision'] == 'include' for r in rows)})")
-        st.dataframe(table("include"), width="stretch", hide_index=True)
-        st.markdown(f"**Borderline** ({sum(r['decision'] == 'review' for r in rows)})")
-        st.dataframe(table("review"), width="stretch", hide_index=True)
+        st.caption(
+            "Set 'your call' and press Save: keep (an example for this playlist), reject (never "
+            "here again; similar songs are scored down here too), essential (always in), "
+            "uncertain (just noted). Decisions only affect this playlist."
+        )
+        editors = {}
+        for decision, label in (("include", "In the draft"), ("review", "Borderline")):
+            df = table(decision)
+            st.markdown(f"**{label}** ({len(df)})")
+            if df.empty:
+                continue
+            editors[decision] = (
+                df,
+                st.data_editor(
+                    df,
+                    key=f"edit-{pick}-{decision}",
+                    width="stretch",
+                    hide_index=True,
+                    disabled=[c for c in df.columns if c != "your call"],
+                    column_config={
+                        "your call": st.column_config.SelectboxColumn(options=choices),
+                        "uri": None,
+                    },
+                ),
+            )
+        if editors and st.button("Save my calls", type="primary"):
+            changed = 0
+            with Database(settings.db_path) as db:
+                ident = idn.get_identity(db, names[pick])
+                for before, after in editors.values():
+                    for (_, b), (_, a) in zip(before.iterrows(), after.iterrows(), strict=True):
+                        if a["your call"] and a["your call"] != b["your call"]:
+                            fb.decide_uri(db, ident, a["uri"], a["your call"])
+                            changed += 1
+            st.success(f"Saved {changed} decision(s). Rebuild drafts to apply them.")
+
+        with st.expander("Progress: acceptance, rejections, changes"):
+            with Database(settings.db_path) as db:
+                st.dataframe(
+                    pd.DataFrame(
+                        [
+                            {
+                                "playlist": x.name,
+                                "kept": x.kept,
+                                "rejected": x.rejected,
+                                "essential": x.essential,
+                                "acceptance": x.acceptance_rate,
+                                "manual adds": x.manual_adds,
+                            }
+                            for x in fb.stats(db)
+                        ]
+                    ),
+                    hide_index=True,
+                )
+                sugg = fb.suggest_avoid_tags(db, names[pick], sc.load_descriptors(db))
+            for x in sugg:
+                st.info(
+                    f"Your rejects in {pick} often have '{x['tag']}' "
+                    f"({round(100 * x['in_rejected'])}% vs {round(100 * x['in_examples'])}% of "
+                    "examples). Add it to 'Avoid tags' in New collection if that's the pattern."
+                )
 
 
 with tab_analysis:

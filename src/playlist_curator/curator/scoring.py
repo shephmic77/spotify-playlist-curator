@@ -52,6 +52,8 @@ THRESHOLD_PERCENTILE = 0.30
 THRESHOLD_MIN, THRESHOLD_MAX = 0.30, 0.75
 REVIEW_BAND = 0.08
 DEFAULT_THRESHOLD = 0.45  # when a playlist has fewer than 3 scorable examples
+REJECT_SIMILAR = 0.85  # closer than this to a rejected song (and closer than to any example)
+REJECT_PENALTY = 0.80
 MAX_SHARE = 0.20  # a playlist may hold at most this share of the tagged library
 MAX_OVERLAPS_REPORTED = 10
 OVERLAP_REPORT = 0.7
@@ -84,6 +86,7 @@ class DraftResult:
     unassigned: list[str]
     overlaps: list[dict[str, Any]]
     untagged: int
+    changes: dict[str, dict[str, int]] = field(default_factory=dict)  # name -> added/removed
 
 
 # ---------------------------------------------------------------------------
@@ -167,11 +170,15 @@ def tag_specificity(vectors: dict[str, dict[str, float]]) -> dict[str, float]:
     return {t: math.log((n + 1) / (df.get(t, 0) + 1)) + 1 for t in tags}
 
 
-def _examples(db: Database, identity_id: int, lib: Library) -> dict[str, set[str]]:
+def _examples(
+    db: Database, identity_id: int, lib: Library, hide: set[str] | None = None
+) -> dict[str, set[str]]:
     out: dict[str, set[str]] = defaultdict(set)
     for uri, role in db.conn.execute(
         "SELECT uri, role FROM identity_examples WHERE identity_id=?", (identity_id,)
     ):
+        if hide and uri in hide:
+            continue
         rid = lib.rec_of_uri.get(uri)
         if rid:
             out[role].add(rid)
@@ -191,8 +198,17 @@ def _top_tag_reasons(vec: dict[str, float], weights: dict[str, float], n: int = 
     return ", ".join(t for t, _ in contrib)
 
 
-def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft:
-    ex = _examples(db, ident.identity_id, lib)
+def score_playlist(
+    db: Database,
+    ident: Identity,
+    lib: Library,
+    *,
+    previous: set[str] | None = None,
+    hide: set[str] | None = None,
+) -> PlaylistDraft:
+    """Score one playlist. ``previous`` = songs in its last draft (they get the lower exit
+    bar, for stability); ``hide`` = example URIs to ignore (holdout evaluation)."""
+    ex = _examples(db, ident.identity_id, lib, hide)
     refs, essential, excluded = ex["reference"], ex["essential"], ex["exclude"]
     rules = ident.rules
     weights = {t: float(w) for t, w in (rules.get("tags") or {}).items()}
@@ -217,6 +233,10 @@ def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft
     ref_matrix = lib.matrix[ref_rows] if ref_rows else None
     ref_ids = [lib.rids[i] for i in ref_rows]
     sims_all = lib.matrix @ ref_matrix.T if ref_matrix is not None else None
+    # Songs you rejected act as negative examples for this playlist only
+    rej_rows = [lib.index[r] for r in excluded if r in lib.index and lib.vectors[r]]
+    rej_ids = [lib.rids[i] for i in rej_rows]
+    rej_sims = lib.matrix @ lib.matrix[rej_rows].T if rej_rows else None
 
     def raw(rid: str) -> SongScore:
         vec = lib.vectors[rid]
@@ -258,6 +278,29 @@ def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft
         if bad > 0:
             score *= 1 - bad
             reasons.append("slightly matches an avoided tag")
+        if rej_sims is not None and rid not in excluded:
+            rrow = rej_sims[lib.index[rid]]
+            j = int(np.argmax(rrow))
+            best_rej = float(rrow[j])
+            best_ref = (
+                float(
+                    max(
+                        (
+                            p
+                            for p, r in zip(sims_all[lib.index[rid]], ref_ids, strict=True)
+                            if r != rid
+                        ),
+                        default=0.0,
+                    )
+                )
+                if sims_all is not None
+                else 0.0
+            )
+            if best_rej >= REJECT_SIMILAR and best_rej > best_ref:
+                score *= REJECT_PENALTY
+                reasons.append(
+                    f"sounds more like {lib.titles[rej_ids[j]]}, which you rejected here"
+                )
         y = lib.years.get(rid)
         if years and y and not (years[0] <= y <= years[1]):
             score *= ERA_PENALTY
@@ -301,6 +344,8 @@ def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft
     if not weights and not ref_rows:
         draft.notes.append("no tags and no example songs: nothing to match against")
 
+    previous = previous or set()
+    exit_bar = threshold - REVIEW_BAND
     for rid, s in scores.items():
         if rid in excluded:
             continue
@@ -310,6 +355,11 @@ def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft
             continue
         if s.score >= threshold:
             s.decision = "include"
+            draft.include.append(s)
+        elif rid in previous and s.score >= exit_bar and s.score > 0:
+            # Stability: a song already in the playlist only leaves when it falls clearly below
+            s.decision = "include"
+            s.reasons.append("kept from the last draft (stays unless it falls clearly below)")
             draft.include.append(s)
         elif s.score >= threshold - REVIEW_BAND and s.score > 0:
             s.decision = "review"
@@ -329,7 +379,28 @@ def score_playlist(db: Database, ident: Identity, lib: Library) -> PlaylistDraft
 
 def build_drafts(db: Database, *, descriptors: dict[str, Descriptors] | None = None) -> DraftResult:
     lib = load_library(db, descriptors)
-    drafts = [score_playlist(db, ident, lib) for ident in list_identities(db)]
+    prev_run = latest_run(db)
+    previous: dict[int, set[str]] = defaultdict(set)
+    if prev_run is not None:
+        for iid, rid in db.conn.execute(
+            "SELECT identity_id, recording_id FROM draft_members "
+            "WHERE run_id=? AND decision='include'",
+            (prev_run,),
+        ):
+            previous[iid].add(rid)
+    drafts = [
+        score_playlist(db, ident, lib, previous=previous.get(ident.identity_id))
+        for ident in list_identities(db)
+    ]
+    changes = {}
+    if prev_run is not None:
+        for d in drafts:
+            now_in = {s.recording_id for s in d.include}
+            before = previous.get(d.identity.identity_id, set())
+            changes[d.identity.name] = {
+                "added": len(now_in - before),
+                "removed": len(before - now_in),
+            }
 
     assigned = {s.recording_id for d in drafts for s in d.include}
     unassigned = [r for r in lib.rids if r not in assigned]
@@ -366,6 +437,7 @@ def build_drafts(db: Database, *, descriptors: dict[str, Descriptors] | None = N
         },
         "unassigned": len(unassigned),
         "recordings": len(lib.rids),
+        "changes": changes,
     }
     with db.transaction():
         cur = db.conn.execute(
@@ -397,7 +469,7 @@ def build_drafts(db: Database, *, descriptors: dict[str, Descriptors] | None = N
             "(SELECT run_id FROM draft_runs ORDER BY run_id DESC LIMIT 5)"
         )
     untagged = sum(1 for r in lib.rids if not lib.vectors[r])
-    return DraftResult(run_id, drafts, unassigned, overlaps, untagged)
+    return DraftResult(run_id, drafts, unassigned, overlaps, untagged, changes)
 
 
 def latest_run(db: Database) -> int | None:

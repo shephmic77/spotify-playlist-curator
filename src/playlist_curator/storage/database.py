@@ -240,6 +240,36 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX idx_draft_members_identity ON draft_members(run_id, identity_id);
     """,
+    # v6 - Phase 5: your decisions on songs, per playlist
+    """
+    -- Latest decision per playlist and song. User data; never derived.
+    CREATE TABLE feedback (
+        identity_id INTEGER NOT NULL REFERENCES identities(identity_id) ON DELETE CASCADE,
+        uri         TEXT NOT NULL,
+        -- keep | reject | essential | uncertain
+        decision    TEXT NOT NULL,
+        -- the example role this song had before your decision, restored on undo
+        prev_role   TEXT,
+        prev_source TEXT,
+        -- draft score when you decided (for acceptance metrics), if it was in a draft
+        score       REAL,
+        -- include | review | none: where the draft had it when you decided
+        draft_state TEXT NOT NULL,
+        decided_at  TEXT NOT NULL,
+        PRIMARY KEY (identity_id, uri)
+    );
+
+    -- Every decision ever made, for metrics over time. Append-only.
+    CREATE TABLE feedback_log (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        identity_id INTEGER NOT NULL,
+        uri         TEXT NOT NULL,
+        decision    TEXT NOT NULL,
+        draft_state TEXT NOT NULL,
+        score       REAL,
+        decided_at  TEXT NOT NULL
+    );
+    """,
 ]
 
 

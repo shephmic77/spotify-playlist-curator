@@ -138,6 +138,12 @@ def cmd_draft(settings: Settings, args: argparse.Namespace) -> int:
         f"\n  Songs in no playlist: {len(res.unassigned)}"
         f" ({res.untagged} have no tags at all, so they can't be matched)"
     )
+    moved = {k: v for k, v in res.changes.items() if v["added"] or v["removed"]}
+    if moved:
+        print(
+            "  Changes since the last draft: "
+            + ", ".join(f"{k} +{v['added']}/-{v['removed']}" for k, v in sorted(moved.items()))
+        )
     for o in res.overlaps:
         print(
             f"  ~ {o['a']} and {o['b']} share {o['shared']} songs "
@@ -146,6 +152,7 @@ def cmd_draft(settings: Settings, args: argparse.Namespace) -> int:
     print(
         '\nLook inside one: curator drafts show "Name"   ·   leftovers: curator drafts unassigned'
     )
+    print('Decide song by song: curator review "Name"   ·   progress: curator stats')
     return 0
 
 

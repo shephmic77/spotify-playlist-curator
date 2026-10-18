@@ -75,6 +75,9 @@ Re-verify against docs/spotify_api.md links before adding endpoints.
 - The new collection is built **from scratch**. Old playlists and their descriptions are
   evidence; never propose keeping/renaming an old playlist or write to one.
 - Hand-picked identities (`auto_maintain = 0`) never get songs added automatically.
+- Feedback is per playlist and always beats scores. `feedback` / `feedback_log` are user data.
+  Learning = examples, exclusions, negative-example penalty and *suggested* avoid tags; never a
+  trained model.
 - `describe` may send **only the user's typed description** to Claude. Never include song,
   artist, playlist, tag or any other library data in that request. Examples are resolved
   locally. Song-to-playlist matching stays rule-based (`curator/scoring.py`).
@@ -91,5 +94,6 @@ pytest
 ruff check . && ruff format --check .
 curator auth login | import | inventory | playlists | duplicates ... | local-files
 curator enrich | analyze | intents ... | propose | proposals ... | identities ...
-curator describe ... | draft | drafts [show|unassigned] | ui | purge
+curator describe ... | draft | drafts [show|unassigned] | review | feedback | decisions
+curator stats [--evaluate] | ui | purge
 ```
