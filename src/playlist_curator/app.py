@@ -26,6 +26,9 @@ from playlist_curator.crate.inventory import (
     summarize,
     track_table,
 )
+from playlist_curator.curator import discovery as disc
+from playlist_curator.curator import identities as idn
+from playlist_curator.curator import intents as it
 from playlist_curator.curator.analysis import analyze
 from playlist_curator.spotify.auth import AuthError, TokenManager, TokenStore
 from playlist_curator.spotify.client import SpotifyAPIError, SpotifyClient
@@ -100,6 +103,10 @@ with Database(settings.db_path) as db:
     local_files = pd.DataFrame(local_files_table(db))
     runs = db.last_runs(20)
     report = analyze(db)
+    intents = {i.playlist_id: i for i in it.list_intents(db)}
+    proposals = disc.load_proposals(db)
+    identities = idn.list_identities(db)
+    readable = [r for r in db.list_playlists() if r["contents_status"] == "fetched"]
 
 st.title("Library")
 
@@ -126,9 +133,10 @@ c[4].metric(
 )
 st.caption("Unassigned songs will appear here once playlist assignment exists (Phase 4).")
 
-tab_analysis, tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = st.tabs(
+tab_new, tab_analysis, tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = st.tabs(
     [
-        "Playlist analysis",
+        f"New collection ({len(proposals)} to review)",
+        "Old playlist analysis",
         "Songs",
         f"Duplicates ({len(suggestions)} to review)",
         "Local files",
@@ -136,6 +144,141 @@ tab_analysis, tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = st.tabs(
         "Import history",
     ]
 )
+
+
+def regenerate() -> None:
+    with Database(settings.db_path) as db:
+        props, _ = disc.propose(db)
+        disc.save_proposals(db, props)
+    st.rerun()
+
+
+with tab_new:
+    st.caption(
+        "Your new collection is built from scratch. Old playlists are only evidence: describe "
+        "what each was for, generate proposals, then accept the concepts you want."
+    )
+    left, right = st.columns([3, 2])
+
+    with right:
+        st.subheader(f"Your new playlists ({len(identities)})")
+        if not identities:
+            st.write("None yet. Accept a proposal to create one.")
+        for ident in identities:
+            with st.expander(f"#{ident.identity_id} {ident.name} · {ident.kind}"):
+                with st.form(f"ident-{ident.identity_id}"):
+                    name = st.text_input("Name", ident.name)
+                    concept = st.text_area("Concept", ident.concept, height=70)
+                    tags = st.text_input(
+                        "Tags (tag=weight, comma-separated)",
+                        ", ".join(f"{t}={w:g}" for t, w in (ident.rules.get("tags") or {}).items()),
+                    )
+                    avoid = st.text_input(
+                        "Avoid tags", ", ".join(ident.rules.get("avoid_tags") or [])
+                    )
+                    yrs = ident.rules.get("years")
+                    years = st.text_input(
+                        "Preferred years (FROM-TO or none)", f"{yrs[0]}-{yrs[1]}" if yrs else "none"
+                    )
+                    auto = st.checkbox("Let the app add matching songs", ident.auto_maintain)
+                    c1, c2 = st.columns(2)
+                    save = c1.form_submit_button("Save", type="primary")
+                    retire = c2.form_submit_button("Retire")
+                if save:
+                    new_tags = idn.parse_tag_weights(
+                        [x.strip() for x in tags.split(",") if x.strip()]
+                    )
+                    with Database(settings.db_path) as db:
+                        current = set(ident.rules.get("tags") or {})
+                        idn.edit_identity(
+                            db,
+                            ident.identity_id,
+                            name=name,
+                            concept=concept,
+                            add_tags=new_tags,
+                            remove_tags=list(current - set(new_tags)),
+                            avoid_tags=[x.strip() for x in avoid.split(",") if x.strip()],
+                            unavoid_tags=list(ident.rules.get("avoid_tags") or []),
+                            years=idn.parse_years(years),
+                            auto_maintain=auto,
+                        )
+                    st.rerun()
+                if retire:
+                    act(idn.set_status, ident.identity_id, "retired")
+
+    with left:
+        st.subheader("Proposals")
+        if st.button("Generate / refresh proposals", type="primary"):
+            regenerate()
+        if not proposals:
+            st.write("No pending proposals. Describe your old playlists below, then generate.")
+        labels = {
+            "from_description": "from your descriptions",
+            "from_library": "found in your library",
+            "handpicked": "hand-picked (optional)",
+        }
+        for prop in proposals:
+            ev = prop.evidence
+            with st.container(border=True):
+                st.markdown(f"**{prop.title}** · {labels[prop.action]} · `#{prop.proposal_id}`")
+                st.caption(prop.draft.concept)
+                if ev.get("from_playlists"):
+                    st.markdown(
+                        "From old playlists: "
+                        + ", ".join(f"{x['name']} ({x['songs']})" for x in ev["from_playlists"])
+                        + f" · {ev.get('example_songs', 0)} example songs"
+                    )
+                if ev.get("cluster_songs"):
+                    st.markdown(f"{ev['cluster_songs']} songs in your library cluster here")
+                if ev.get("top_tags"):
+                    st.markdown(
+                        "Sound: "
+                        + ", ".join(
+                            f"{t['tag']} ({round(100 * t['support'])}%, ×{t['lift']})"
+                            for t in ev["top_tags"][:6]
+                        )
+                    )
+                if prop.draft.rules.get("years"):
+                    lo, hi = prop.draft.rules["years"]
+                    st.markdown(f"Era from your description: {lo}–{hi} (preferred)")
+                for sim in ev.get("similar_to", []):
+                    st.info(f"Sounds like '{sim['title']}' ({sim['sim']}): you may only want one.")
+                c1, c2, c3 = st.columns([2, 1, 1])
+                new_name = c1.text_input(
+                    "Name",
+                    prop.title,
+                    key=f"pname-{prop.proposal_id}",
+                    label_visibility="collapsed",
+                )
+                if c2.button("Accept", key=f"acc-{prop.proposal_id}", type="primary"):
+                    act(lambda db, pid=prop.proposal_id, n=new_name: disc.accept(db, pid, name=n))
+                if c3.button("Reject", key=f"rej-{prop.proposal_id}"):
+                    act(disc.reject, prop.proposal_id)
+
+        st.subheader("What your old playlists were for")
+        st.caption(
+            "sound / mood / situation / era can become concepts · handpicked comes back as "
+            "optional · source / catch_all / mixed / unknown just add their songs to the pool"
+        )
+        for r in readable:
+            cur = intents.get(r["spotify_id"])
+            with (
+                st.expander(
+                    f"{r['name']} · {r['stored_entries']} songs · "
+                    + (f"{cur.kind}: {cur.title}" if cur else "not described")
+                ),
+                st.form(f"intent-{r['spotify_id']}"),
+            ):
+                title = st.text_input("Short name", cur.title if cur else "")
+                text = st.text_input("What it was for", cur.intent if cur else "")
+                kind = st.selectbox(
+                    "Kind",
+                    it.KINDS,
+                    index=it.KINDS.index(cur.kind) if cur else len(it.KINDS) - 1,
+                )
+                if st.form_submit_button("Save"):
+                    act(it.set_intent, r["spotify_id"], text or title, kind, title)
+
 
 with tab_analysis:
     st.caption(

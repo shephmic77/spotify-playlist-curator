@@ -15,7 +15,8 @@ or deletes your original playlists.
 | 1 | Spotify connection, Liked Songs + playlist import, inventory | **Done** |
 | 2 | Master Music Crate: recording-level dedup, provenance, local files | **Done** |
 | 3a | Tags from MusicBrainz + Last.fm; analysis of your existing playlists | **Done** |
-| 3b | Playlist identities and proposed playlist collection | Next |
+| 3b | Proposals for a new collection (from your descriptions + library clusters); editable playlist definitions | **Done** |
+| 4 | Score songs into the approved playlists (draft playlists) | Next |
 | 4 | Multi-label scoring and draft playlists | Planned |
 | 5 | Feedback and personalization | Planned |
 | 6 | Creating playlists in Spotify (preview → approve → write, rollback) | Planned |
@@ -44,6 +45,10 @@ See [docs/project_plan.md](docs/project_plan.md) for the full roadmap.
 
 - **Tags from MusicBrainz and Last.fm** (Phase 3a, `curator enrich`): genre, era and mood tags
   for each song, fetched one song at a time within each service's rate limits and cached.
+- **A new collection, from scratch** (Phase 3b): describe what your old playlists were for
+  (`curator intents`), then `curator propose` suggests concepts from those descriptions and
+  from clusters in your library's tags, each with its evidence. Accepting one creates an
+  editable playlist definition (concept, tags, preferred years, example songs).
 - **Analysis of your existing playlists** (`curator analyze`): each playlist's sound and era,
   cohesion, songs that don't fit, drift between early and later additions, staleness, and
   overlapping or redundant playlists.
@@ -110,6 +115,10 @@ curator playlists           # which playlists were read, and which Spotify withh
 curator duplicates review   # confirm or reject suggested duplicate matches
 curator enrich              # fetch tags (first run ~30-40 min; cached after that)
 curator analyze             # report on your existing playlists
+curator intents import data/intents.json   # or: curator intents set "W" "gym" --kind situation
+curator propose             # proposals for the new collection
+curator proposals accept 3 7 12   ·   curator proposals reject 5
+curator identities          # your new playlists; `identities edit NAME --add-tag ...`
 curator ui                  # Streamlit interface at http://localhost:8501
 ```
 
@@ -150,7 +159,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 128 tests; Spotify, MusicBrainz and Last.fm are mocked
+pytest            # 155 tests; Spotify, MusicBrainz and Last.fm are mocked
 ruff check . && ruff format --check .
 ```
 

@@ -29,17 +29,21 @@ src/playlist_curator/
     descriptors.py     Per-recording descriptors from the cache; `enrich` runner
   curator/
     analysis.py        Existing-playlist report: profile, cohesion, outliers, drift, overlap
+    intents.py         Your descriptions of old playlists (evidence, never instructions to keep)
+    discovery.py       Proposals: concepts from descriptions + tag clusters (spherical k-means)
+    identities.py      Playlist identities: concept, tag rules, years, example songs
+  cli_concepts.py      CLI for intents / propose / proposals / identities
   storage/
     database.py        SQLite schema, migrations, queries, purge
   cli.py               `curator` command
-  app.py               Streamlit UI (Library, Duplicates, Local files)
+  app.py               Streamlit UI (New collection, Old playlist analysis, Songs, Duplicates, Local files)
 tests/
   fake_spotify.py      httpx.MockTransport fake of the API
   fixtures/library.json
 ```
 
 Planned modules (not yet present, created when their phase starts so nothing is a stub):
-`curator/playlist_discovery.py`, `classification.py`, `scoring.py` (3–4), `feedback.py` (5),
+`curator/scoring.py`, `classification.py` (4), `feedback.py` (5),
 `spotify/sync.py` (6), `curator/maintenance.py`, `scripts/run_sync.py` (7).
 
 ## Data flow
@@ -58,7 +62,7 @@ SQLite (crate) + metadata providers + user identities/feedback
    ──► review UI ──► approved change set ──► spotify/sync (diff, apply, verify, log)
 ```
 
-## Database (schema v3)
+## Database (schema v4)
 
 | Table | Purpose |
 |---|---|
@@ -71,6 +75,10 @@ SQLite (crate) + metadata providers + user identities/feedback
 | `recording_members` | *derived* — which URIs belong to which recording, and why (`self`, `isrc`, `accepted`) |
 | `dedup_suggestions` | *derived* — pending possible matches (`title_match`, `local_match`) |
 | `dedup_decisions` | **user data** — `same` / `different` per URI pair; never rebuilt, survives tracks leaving |
+| `playlist_intents` | **user data** — what each old playlist was for (title, description, kind) |
+| `proposals` | proposed concepts with evidence and a draft definition; pending / accepted / rejected |
+| `identities` | **user data** — approved playlist definitions (name, kind, concept, rules, auto-maintain) |
+| `identity_examples` | **user data** — example / excluded / essential songs per identity, keyed by URI |
 | `metadata_cache` | trimmed MusicBrainz / Last.fm responses keyed by provider + lookup key, with expiry. Descriptors are computed from it on demand |
 
 Tracks stay keyed by URI. Recordings are a layer on top, rebuilt from tracks + decisions, so

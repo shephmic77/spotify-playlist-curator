@@ -94,7 +94,7 @@ from tag measures and counted separately.
 | Lift | mean weight in playlist ÷ mean weight across the whole crate |
 | Distinguishing tags | support ≥ 0.25, ranked by support × log2(1 + lift) |
 | Cohesion | mean cosine similarity of songs to the profile (0–1) |
-| Outliers | songs below max(0.15, cohesion − 2·sd), lowest first, ≤ 10 |
+| Outliers | songs below max(0.15, min(cohesion − 2·sd, 0.5·cohesion)), lowest first, ≤ 10 |
 | Drift | cosine between profiles of the first and second half of songs by date added (≥ 20 dated, tagged songs) |
 | Overlap | Jaccard and containment (shared ÷ smaller) of recording sets; profile cosine |
 
@@ -102,3 +102,15 @@ Flags (heuristic thresholds, not calibrated): fewer than 8 songs; nothing added 
 cohesion < 0.30 (broad/mixed); drift similarity < 0.60; containment ≥ 0.6, Jaccard ≥ 0.4, or
 profile cosine ≥ 0.90 between playlists. These thresholds will be revisited against your
 feedback in Phase 5.
+
+
+## Proposal engine (implemented, `curator/discovery.py`)
+
+- Concepts from descriptions: songs of the described old playlists (minus analysis misfits)
+  are example songs; rule tags = distinguishing tags of those examples (support ≥ 0.25,
+  ranked by support × log2(1 + lift), top 8, weight = support).
+- Library clusters: tags on ≥ 3 songs are dimensions; rows L2-normalised; spherical k-means
+  (k-means++ seeding on cosine distance, 4 restarts, seed 42); k in 6–18 chosen by mean
+  silhouette (cosine); clusters < 15 songs dropped. A cluster with cosine ≥ 0.80 to a described
+  concept counts as covered (shown as supporting evidence); others become proposals.
+- Described concepts with profile cosine ≥ 0.85 are flagged as similar.

@@ -46,14 +46,21 @@ Owner chose option 2 (`data_sources.md`). Delivered:
 Not verified here: live calls to MusicBrainz/Last.fm (not reachable from the build sandbox;
 covered by mocked tests) and the Streamlit tab.
 
-## Phase 3b — Playlist identities and proposals (next)
+## Phase 3b — Proposals for a new collection ✅ (2026-10-18)
 
-- Playlist identity model and editor: concept, qualifying/disqualifying tags and eras,
-  exceptions, neighbors, reference songs, exclusions.
-- Proposed collection: start from old playlists worth keeping (cohesive, not redundant),
-  suggest splits for broad/drifted ones and merges for redundant pairs, and suggest new
-  concepts from tag clusters in the crate. Every proposal carries its evidence; you approve,
-  edit or reject. Nothing is written to Spotify.
+The owner wants the collection rebuilt from scratch; old playlists are evidence only.
+Delivered:
+- Descriptions of old playlists (`playlist_intents`) with a kind that decides their role:
+  sound / mood / situation / era → concept seeds; handpicked → optional hand-picked playlist;
+  source / catch_all / mixed / unknown → songs only.
+- Proposal engine: concepts from descriptions (same-titled descriptions merge, e.g. two "indie
+  chill" lists; misfits flagged by the analysis aren't used as examples; decades in the text
+  become a preferred year range) plus concepts from tag clusters no description covers
+  (spherical k-means, k by silhouette). Similar concepts are flagged, not merged.
+- Accept → editable identity (name, concept, tags, avoid tags, preferred years, auto-maintain,
+  example songs). Re-running `propose` never resurrects decided proposals.
+- CLI (`intents`, `propose`, `proposals`, `identities`) and a "New collection" UI tab.
+- 155 tests, including a smoke run of the whole Streamlit script against a stand-in module.
 
 ## Phase 4 — Classification and curation
 

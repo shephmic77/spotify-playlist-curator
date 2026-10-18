@@ -252,7 +252,9 @@ def analyze(db: Database, *, descriptors: dict[str, Descriptors] | None = None) 
             sims = {r: cosine(vectors[r], prof) for r in tagged}
             rep.cohesion = round(statistics.mean(sims.values()), 3)
             spread = statistics.pstdev(sims.values()) if len(sims) > 1 else 0.0
-            cutoff = max(0.15, rep.cohesion - 2 * spread)
+            # Far below the playlist's own spread AND well below its typical similarity, so a
+            # 0.97 song in a 0.99 playlist isn't called a misfit.
+            cutoff = max(0.15, min(rep.cohesion - 2 * spread, 0.5 * rep.cohesion))
             low = sorted((r for r in tagged if sims[r] < cutoff), key=lambda r: sims[r])
             rep.outliers = [
                 SongRef(r, info[r]["title"], info[r]["artists"], round(sims[r], 3))

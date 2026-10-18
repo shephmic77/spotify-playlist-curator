@@ -158,6 +158,64 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (provider, lookup_key)
     );
     """,
+    # v4 - Phase 3b: your descriptions of old playlists, playlist identities, proposals
+    """
+    -- What you say an old playlist was for. Evidence only: the new collection is built from
+    -- scratch. User data; never derived.
+    CREATE TABLE playlist_intents (
+        playlist_id TEXT PRIMARY KEY,
+        title       TEXT NOT NULL,
+        intent      TEXT NOT NULL,
+        -- sound | mood | situation | era | handpicked | source | catch_all | mixed | unknown
+        kind        TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+    );
+
+    -- A playlist the app will build and maintain (or, for hand-picked kinds, only hold).
+    CREATE TABLE identities (
+        identity_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+        name          TEXT NOT NULL,
+        kind          TEXT NOT NULL,
+        concept       TEXT NOT NULL DEFAULT '',
+        -- approved | rejected | retired
+        status        TEXT NOT NULL,
+        -- 0 = never add songs automatically (hand-picked, source-based)
+        auto_maintain INTEGER NOT NULL,
+        rules_json    TEXT NOT NULL,
+        origin_json   TEXT NOT NULL,
+        created_at    TEXT NOT NULL,
+        updated_at    TEXT NOT NULL
+    );
+
+    -- Songs you (or the seed playlist) say belong, never belong, or must stay. Keyed by URI
+    -- so they survive duplicate regrouping; resolved to recordings when used.
+    CREATE TABLE identity_examples (
+        identity_id INTEGER NOT NULL REFERENCES identities(identity_id) ON DELETE CASCADE,
+        uri         TEXT NOT NULL,
+        -- reference | exclude | essential
+        role        TEXT NOT NULL,
+        -- seed | user
+        source      TEXT NOT NULL,
+        added_at    TEXT NOT NULL,
+        PRIMARY KEY (identity_id, uri)
+    );
+
+    -- A proposed concept for the new collection, with the evidence behind it.
+    CREATE TABLE proposals (
+        proposal_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+        -- from_description | from_library | handpicked
+        action         TEXT NOT NULL,
+        title          TEXT NOT NULL,
+        playlists_json TEXT NOT NULL,
+        evidence_json  TEXT NOT NULL,
+        drafts_json    TEXT NOT NULL,
+        -- pending | accepted | rejected | superseded
+        status         TEXT NOT NULL,
+        signature      TEXT NOT NULL,
+        created_at     TEXT NOT NULL,
+        decided_at     TEXT
+    );
+    """,
 ]
 
 
