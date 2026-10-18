@@ -23,6 +23,7 @@ from playlist_curator.metadata.providers import (
     LastfmProvider,
     MusicBrainzProvider,
     ProviderError,
+    ProviderFatal,
     RecordingQuery,
     clean_lookup_title,
 )
@@ -112,8 +113,13 @@ class EnrichStats:
     found: int = 0
     not_found: int = 0
     from_cache: int = 0
+    errors: int = 0
     requests: int = 0
     stopped_early: str | None = None
+    last_error: str | None = None
+
+
+MAX_CONSECUTIVE_ERRORS = 10
 
 
 def enrich(
@@ -135,13 +141,26 @@ def enrich(
         stats = EnrichStats(p.name)
         todo = len(queries)
         say(f"{p.name}: {todo} recordings")
+        streak = 0
         for i, q in enumerate(queries, 1):
             try:
                 outcome = p.lookup(q)
-            except ProviderError as exc:
+            except ProviderFatal as exc:
                 stats.stopped_early = str(exc)
                 say(f"{p.name}: stopped: {exc}")
                 break
+            except ProviderError as exc:
+                # One bad lookup: skip this recording, keep going. Many in a row usually
+                # means the service is down, so stop instead of hammering it.
+                stats.errors += 1
+                stats.last_error = str(exc)
+                streak += 1
+                if streak >= MAX_CONSECUTIVE_ERRORS:
+                    stats.stopped_early = f"{streak} failures in a row; last: {exc}"
+                    say(f"{p.name}: stopped: {stats.stopped_early}")
+                    break
+                continue
+            streak = 0
             stats.recordings += 1
             if outcome is not None and outcome.found:
                 stats.found += 1

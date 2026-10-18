@@ -10,6 +10,7 @@ from playlist_curator.metadata.providers import (
     LastfmProvider,
     MusicBrainzProvider,
     ProviderError,
+    ProviderFatal,
     RateLimiter,
     RecordingQuery,
     clean_lookup_title,
@@ -252,3 +253,64 @@ def test_descriptor_freshness_uses_utc(db, apis):
     lfm(db, apis).lookup(MIDNIGHT)
     row = db.conn.execute("SELECT expires_at FROM metadata_cache LIMIT 1").fetchone()
     assert datetime.fromisoformat(row[0]) > datetime.now(UTC)
+
+
+def test_musicbrainz_inc_is_space_separated_in_the_query(db, apis):
+    mb(db, apis).lookup(MIDNIGHT)
+    # httpx turns spaces into "+", which MusicBrainz reads as separators. A literal "+"
+    # would become %2B and be rejected (the bug that stopped the first real run).
+    assert apis.raw_queries[0].startswith("inc=artists+tags+genres")
+    assert "%2B" not in apis.raw_queries[0]
+
+
+def test_malformed_isrc_is_skipped_not_fatal(fake, client, db, apis):
+    imported(client, db)
+    apis.malformed_isrcs.add("FRZID1100001")
+    (s,) = enrich(db, [mb(db, apis)])
+    assert s.stopped_early is None
+    assert s.found == 2  # Take On Me and Africa still processed
+    status = db.conn.execute(
+        "SELECT status FROM metadata_cache WHERE lookup_key='isrc:FRZID1100001'"
+    ).fetchone()[0]
+    assert status == "invalid"
+
+
+def test_musicbrainz_403_stops_the_run(fake, client, db, apis):
+    imported(client, db)
+    apis.forbidden.update({"FRZID1100001", "GBAYE8500001", "USSM19801234"})
+    (s,) = enrich(db, [mb(db, apis)])
+    assert s.stopped_early and "refused" in s.stopped_early
+
+
+def test_isolated_errors_are_counted_and_skipped(fake, client, db, apis):
+    imported(client, db)
+    apis.injected.extend([httpx.Response(500)] * 5)  # one lookup exhausts its retries
+    (s,) = enrich(db, [mb(db, apis)])
+    assert s.errors == 1 and s.stopped_early is None
+    assert s.recordings == 9
+
+
+def test_repeated_errors_stop_the_run(fake, client, db, apis, monkeypatch):
+    from playlist_curator.metadata import descriptors
+
+    monkeypatch.setattr(descriptors, "MAX_CONSECUTIVE_ERRORS", 3)  # small fixture library
+    imported(client, db)
+    apis.injected.extend([httpx.Response(500)] * 200)
+    (s,) = enrich(db, [mb(db, apis)])
+    assert s.stopped_early and "in a row" in s.stopped_early
+
+
+def test_bad_lastfm_key_is_fatal(db, apis):
+    apis.lastfm_error = 10
+    with pytest.raises(ProviderFatal):
+        lfm(db, apis).lookup(MIDNIGHT)
+
+
+def test_falls_back_when_an_inc_value_is_rejected_and_remembers(fake, client, db, apis):
+    imported(client, db)
+    apis.isrc_inc = {"artist-credits", "tags", "genres"}  # if "artists" weren't accepted
+    (s,) = enrich(db, [mb(db, apis)])
+    assert s.found == 3
+    isrc_queries = [q for q in apis.raw_queries if "artist" in q.split("&")[0]]
+    rejected = [q for q in isrc_queries if q.startswith("inc=artists+")]
+    assert len(rejected) == 1  # tried once, then the working variant is reused

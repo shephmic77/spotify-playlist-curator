@@ -38,7 +38,11 @@ LASTFM_BASE = "https://ws.audioscrobbler.com/2.0/"
 
 
 class ProviderError(RuntimeError):
-    """A provider failed in a way that retrying won't fix (bad key, blocked, etc.)."""
+    """One lookup failed. The enrichment run skips that recording and carries on."""
+
+
+class ProviderFatal(ProviderError):
+    """The provider can't be used at all right now (bad key, blocked). Stop the run."""
 
 
 @dataclass(frozen=True)
@@ -208,17 +212,41 @@ class MusicBrainzProvider(_HTTPProvider):
     def __init__(self, db: Database, http: httpx.Client | None, **kw: Any) -> None:
         kw.setdefault("min_interval", 1.1)  # MusicBrainz: ~1 request/second per client
         super().__init__(db, http, **kw)
+        self._accepted_inc: dict[str, str] = {}
 
-    def _fetch(self, key: str, path: str, inc: str, offline: bool) -> tuple[str, Any] | None:
+    def _fetch(self, key: str, path: str, incs: list[str], offline: bool) -> tuple[str, Any] | None:
+        """GET a MusicBrainz resource, trying each ``inc`` variant until one is accepted.
+
+        ``inc`` values are space-separated here; httpx encodes spaces as ``+``, which is what
+        MusicBrainz expects. (Passing a literal "+" gets encoded as %2B and rejected with 400.)
+        """
         cached = self.cache.get(key, allow_expired=offline)
         if cached is not None or offline:
             return cached
-        resp = self._get(f"{MB_BASE}{path}", {"inc": inc, "fmt": "json"})
-        if resp.status_code == 400 and "artist-credits" in inc:
-            resp = self._get(f"{MB_BASE}{path}", {"inc": "tags+genres", "fmt": "json"})
+        # Start from the variant that worked last time, so a rejected variant costs one
+        # extra request per run rather than one per song.
+        start = self._accepted_inc.get(incs[0])
+        ordered = incs[incs.index(start) :] if start in incs else incs
+        resp = None
+        for inc in ordered:
+            resp = self._get(f"{MB_BASE}{path}", {"inc": inc, "fmt": "json"})
+            if resp.status_code != 400:
+                if resp.status_code in (200, 404):  # the inc value itself was accepted
+                    self._accepted_inc[incs[0]] = inc
+                break
+        assert resp is not None
+        if resp.status_code == 400:
+            # Every variant rejected: the identifier itself is malformed. Skip it for a while.
+            self.cache.put(key, "invalid", None, self.not_found_ttl)
+            return "invalid", None
         if resp.status_code == 404:
             self.cache.put(key, "not_found", None, self.not_found_ttl)
             return "not_found", None
+        if resp.status_code in (401, 403):
+            raise ProviderFatal(
+                f"MusicBrainz refused the request (HTTP {resp.status_code}). It may be "
+                "blocking this client; wait a while, and check MUSICBRAINZ_CONTACT in .env."
+            )
         if resp.status_code != 200:
             raise ProviderError(f"musicbrainz {path}: HTTP {resp.status_code}")
         payload = self._trim(resp.json())
@@ -261,7 +289,7 @@ class MusicBrainzProvider(_HTTPProvider):
         res = self._fetch(
             f"isrc:{q.isrc.upper()}",
             f"/isrc/{q.isrc.upper()}",
-            "tags+genres+artist-credits",
+            ["artists tags genres", "artist-credits tags genres", "tags genres"],
             offline,
         )
         if res is None:
@@ -292,7 +320,7 @@ class MusicBrainzProvider(_HTTPProvider):
         artist_ids = chosen[0].get("artist_ids") or []
         if artist_ids:
             ares = self._fetch(
-                f"artist:{artist_ids[0]}", f"/artist/{artist_ids[0]}", "tags+genres", offline
+                f"artist:{artist_ids[0]}", f"/artist/{artist_ids[0]}", ["tags genres"], offline
             )
             if ares and ares[0] == "ok" and ares[1] and ares[1]["tags"]:
                 outcome.tags["mb_artist"] = weights_from_counts(ares[1]["tags"], artist=q.artist)
@@ -311,7 +339,7 @@ class LastfmProvider(_HTTPProvider):
 
     def __init__(self, db: Database, http: httpx.Client | None, api_key: str, **kw: Any) -> None:
         if http is not None and not api_key:  # cache-only use needs no key
-            raise ProviderError("LASTFM_API_KEY is not set in .env")
+            raise ProviderFatal("LASTFM_API_KEY is not set in .env")
         kw.setdefault("min_interval", 0.25)  # stay well under Last.fm's per-key limits
         super().__init__(db, http, **kw)
         self.api_key = api_key
@@ -337,7 +365,7 @@ class LastfmProvider(_HTTPProvider):
                 self.cache.put(key, "not_found", None, self.not_found_ttl)
                 return "not_found", None
             if err in (10, 26):
-                raise ProviderError(f"Last.fm rejected the API key: {body.get('message')}")
+                raise ProviderFatal(f"Last.fm rejected the API key: {body.get('message')}")
             if err in (8, 11, 16, 29) and attempt < self.max_retries:
                 self.sleep(min(2 ** (attempt + 1), 60))
                 continue

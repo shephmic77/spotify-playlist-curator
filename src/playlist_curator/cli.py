@@ -400,6 +400,8 @@ def cmd_enrich(settings: Settings, args: argparse.Namespace) -> int:
                 f"({st.from_cache} from cache, {st.requests} new requests)"
             )
             print(line)
+            if st.errors:
+                print(f"  {st.errors} lookup(s) failed and were skipped; last: {st.last_error}")
             if st.stopped_early:
                 print(f"  stopped early: {st.stopped_early}")
         cov = coverage(db)

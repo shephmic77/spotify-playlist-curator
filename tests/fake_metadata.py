@@ -78,6 +78,10 @@ class FakeMetadataAPIs:
         self.injected: list[httpx.Response] = []
         self.lastfm_error: int | None = None
         self.cache_control: str | None = None
+        self.raw_queries: list[str] = []
+        self.isrc_inc = {"artists", "tags", "genres"}
+        self.malformed_isrcs: set[str] = set()
+        self.forbidden: set[str] = set()
 
     def http(self) -> httpx.Client:
         return httpx.Client(transport=httpx.MockTransport(self.handle))
@@ -91,8 +95,18 @@ class FakeMetadataAPIs:
             return self.injected.pop(0)
         if url.netloc == "musicbrainz.org":
             assert q.get("fmt") == "json"
+            self.raw_queries.append(url.query)
             parts = url.path.split("/")
             kind, ident = parts[-2], parts[-1]
+            # Like the real API: inc values are space-separated ("+" in the raw query). A
+            # literal "+" (sent as %2B) or an unknown value is a 400 Bad Request.
+            allowed = self.isrc_inc if kind == "isrc" else {"tags", "genres"}
+            if any(v not in allowed for v in q.get("inc", "").split(" ")):
+                return httpx.Response(400, json={"error": "Invalid inc"})
+            if ident in self.malformed_isrcs:
+                return httpx.Response(400, json={"error": "Invalid isrc"})
+            if ident in self.forbidden:
+                return httpx.Response(403, json={"error": "blocked"})
             if kind == "isrc" and ident in MB_ISRC:
                 return httpx.Response(200, json={"isrc": ident, "recordings": MB_ISRC[ident]})
             if kind == "artist" and ident in MB_ARTIST:
