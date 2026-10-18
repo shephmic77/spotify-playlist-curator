@@ -136,7 +136,16 @@ c[4].metric(
     s.playlists_contents_unavailable,
     help="Spotify only returns contents of playlists you own or collaborate on.",
 )
-st.caption("Unassigned songs will appear here once playlist assignment exists (Phase 4).")
+if draft_run is not None:
+    in_some = {
+        r["recording_id"] for rows_ in drafts.values() for r in rows_ if r["decision"] == "include"
+    }
+    st.caption(
+        f"In at least one draft playlist: {len(in_some)} songs · in none: "
+        f"{s.unique_recordings - len(in_some)} (allowed: songs only go where they fit)."
+    )
+else:
+    st.caption("Build drafts (Draft playlists tab) to see which songs fit no playlist.")
 
 tab_new, tab_drafts, tab_analysis, tab_songs, tab_dups, tab_local, tab_playlists, tab_runs = (
     st.tabs(
