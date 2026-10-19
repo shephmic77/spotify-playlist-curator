@@ -236,7 +236,8 @@ pytest            # 213 tests; Spotify, MusicBrainz and Last.fm are mocked
 ruff check . && ruff format --check .
 ```
 
-Project conventions for human and AI contributors are in [AGENTS.md](AGENTS.md).
+Project conventions for human and AI contributors are in [AGENTS.md](AGENTS.md); picking the
+project up in Claude Code or Codex: [docs/HANDOFF.md](docs/HANDOFF.md).
 Architecture: [docs/architecture.md](docs/architecture.md).
 
 ## Privacy

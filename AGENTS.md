@@ -1,6 +1,8 @@
 # AGENTS.md — working rules for Claude Code, Codex, and humans
 
 Read this before changing code. It records decisions that are easy to undo by accident.
+New here? Start with [docs/HANDOFF.md](docs/HANDOFF.md): what exists, where every file lives,
+current state, known issues and next tasks.
 
 ## Mission
 
@@ -27,6 +29,11 @@ keep them that way. Quality and user control beat automation and coverage.
 8. **Confidence scores are not probabilities** unless a calibration step exists and is tested.
 9. **No secrets in git.** `.env`, `data/`, tokens, and library exports are git-ignored.
 10. **Only documented Web API endpoints.** No scraping, no undocumented/internal endpoints.
+11. **Git authorship:** author and commit as `Michael Shepherd <mikeystitch9@gmail.com>`. Never
+    add `Co-Authored-By`, `Claude-Session` or other AI attribution to commits or PRs; the owner
+    must be the sole contributor on GitHub.
+12. **Protect `data/curator.sqlite3`.** It holds irreplaceable user data (feedback, decisions,
+    the registry of app-made playlists). Tests must never touch the real `data/` folder.
 
 ## Architecture boundaries
 
