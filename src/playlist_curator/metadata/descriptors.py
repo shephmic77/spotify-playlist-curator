@@ -20,6 +20,7 @@ from typing import Any
 
 from playlist_curator.crate.deduplication import ensure_current, local_title_and_artist
 from playlist_curator.metadata.providers import (
+    AcousticBrainzProvider,
     LastfmProvider,
     MusicBrainzProvider,
     ProviderError,
@@ -29,7 +30,7 @@ from playlist_curator.metadata.providers import (
 )
 from playlist_curator.storage.database import Database
 
-SONG_SOURCES = ("lastfm_track", "mb_recording")
+SONG_SOURCES = ("lastfm_track", "mb_recording", "acousticbrainz")
 ARTIST_SOURCES = ("lastfm_artist", "mb_artist")
 ARTIST_DISCOUNT = 0.6
 
@@ -52,6 +53,15 @@ class Descriptors:
         for t, w in artist.items():
             out[t] = max(out.get(t, 0.0), round(ARTIST_DISCOUNT * w, 4))
         return out
+
+    @property
+    def sound(self) -> dict[str, float]:
+        """The song's own vibe plus its genre / era labels, judged as an individual
+        (metadata/vibes.py, built-in tag classes). Use this for matching; ``combined`` (which
+        mixes in artist tags) is only for describing old playlists."""
+        from playlist_curator.metadata.vibes import TagClasses, profile
+
+        return profile(self.by_source, TagClasses()).merged
 
     @property
     def has_song_level(self) -> bool:
@@ -88,6 +98,7 @@ def offline_providers(db: Database) -> list[Any]:
     return [
         MusicBrainzProvider(db, None, min_interval=0),  # type: ignore[arg-type]
         LastfmProvider(db, None, api_key="", min_interval=0),  # type: ignore[arg-type]
+        AcousticBrainzProvider(db, None, min_interval=0),  # type: ignore[arg-type]
     ]
 
 
@@ -146,6 +157,11 @@ def enrich(
             db.conn.execute("DELETE FROM metadata_cache WHERE provider=?", (p.name,))
         if retry_invalid and hasattr(p, "prepare_run"):
             p.prepare_run()
+        if hasattr(p, "prefetch"):
+            try:
+                p.prefetch(queries, say)
+            except ProviderError as exc:  # fall back to one-by-one lookups
+                say(f"{p.name}: bulk fetch failed ({exc}); continuing one by one")
         stats = EnrichStats(p.name)
         todo = len(queries)
         say(f"{p.name}: {todo} recordings")

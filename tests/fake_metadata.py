@@ -1,4 +1,4 @@
-"""Fakes of the MusicBrainz and Last.fm endpoints used for descriptors."""
+"""Fakes of the MusicBrainz, Last.fm and AcousticBrainz endpoints used for descriptors."""
 
 from __future__ import annotations
 
@@ -71,6 +71,38 @@ LASTFM_ARTIST: dict[str, list[tuple[str, int]]] = {
 }
 
 
+# MusicBrainz recording id -> AcousticBrainz high-level document (real shape, trimmed)
+def _hl(**probs: float) -> dict[str, Any]:
+    pos = {
+        "danceability": "danceable",
+        "mood_relaxed": "relaxed",
+        "mood_happy": "happy",
+        "mood_sad": "sad",
+        "mood_aggressive": "aggressive",
+        "mood_party": "party",
+        "mood_acoustic": "acoustic",
+        "mood_electronic": "electronic",
+        "voice_instrumental": "instrumental",
+    }
+    hl = {}
+    for clf, cls in pos.items():
+        p = probs.get(cls, 0.3)
+        neg = "voice" if cls == "instrumental" else f"not_{cls}"
+        hl[clf] = {
+            "all": {cls: p, neg: round(1 - p, 3)},
+            "probability": max(p, 1 - p),
+            "value": cls if p >= 0.5 else neg,
+        }
+    return {"highlevel": hl, "metadata": {"version": {"essentia": "2.1-beta2"}}}
+
+
+AB_HIGHLEVEL: dict[str, dict[str, Any]] = {
+    "mb-rec-midnight": _hl(danceable=0.9, electronic=0.95, party=0.7),
+    "mb-rec-tom": _hl(danceable=0.8, happy=0.85),
+    # mb-rec-africa: not in AcousticBrainz
+}
+
+
 class FakeMetadataAPIs:
     def __init__(self) -> None:
         self.calls: list[str] = []
@@ -115,6 +147,16 @@ class FakeMetadataAPIs:
                     200, json={"id": ident, "name": "x", "tags": MB_ARTIST[ident], "genres": []}
                 )
             return httpx.Response(404, json={"error": "Not Found"})
+        if url.netloc == "acousticbrainz.org":
+            assert url.path == "/api/v1/high-level"
+            ids = q.get("recording_ids", "").split(";")
+            assert 0 < len(ids) <= 25
+            body = {m: {"0": AB_HIGHLEVEL[m]} for m in ids if m in AB_HIGHLEVEL}
+            return httpx.Response(
+                200,
+                json=body,
+                headers={"X-RateLimit-Remaining": "9", "X-RateLimit-Reset-In": "10"},
+            )
         if url.netloc == "ws.audioscrobbler.com":
             assert q.get("api_key") and q.get("format") == "json"
             if self.lastfm_error is not None:

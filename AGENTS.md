@@ -86,6 +86,15 @@ Re-verify against docs/spotify_api.md links before adding endpoints.
 - The new collection is built **from scratch**. Old playlists and their descriptions are
   evidence; never propose keeping/renaming an old playlist or write to one.
 - Hand-picked identities (`auto_maintain = 0`) never get songs added automatically.
+- **Judge every song as an individual** (owner's decision 2026-10-21, `metadata/vibes.py`):
+  matching uses the song's own tags and audio measures as vibe words. Never let artist-level
+  tags, genre or era drive matching unless the playlist definition names that genre/era; artist
+  tags are only a flagged fallback for songs with no song data. Use `Descriptors.sound` (or
+  `vibes.profile`), not `.combined`, for anything that matches songs.
+- **Every song in at least one playlist** (coverage, default on): leftovers go to their closest
+  playlist as weak fits; never where rejected, never into hand-picked playlists.
+- `DELETE /me/library` also removes Liked Songs given track URIs: only call it through
+  `SpotifyClient.remove_playlists_from_library`, which builds playlist URIs from ids itself.
 - Feedback is per playlist and always beats scores. `feedback` / `feedback_log` are user data.
   Learning = examples, exclusions, negative-example penalty and *suggested* avoid tags; never a
   trained model.

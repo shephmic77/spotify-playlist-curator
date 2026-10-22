@@ -26,6 +26,7 @@ from typing import Any
 import httpx
 
 from playlist_curator.curator.discovery import years_from_text
+from playlist_curator.metadata import vibes
 from playlist_curator.metadata.descriptors import Descriptors
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
@@ -360,8 +361,11 @@ def translate_offline(text: str) -> Recipe:
 
 _SYSTEM = (
     "You translate a person's description of a playlist into music tags of the kind used on "
-    "Last.fm and MusicBrainz (lowercase genre, mood, era, instrument or situation tags such as "
-    "'lo-fi', 'ambient', 'energetic', 'synthwave', '80s', 'female vocalists'). Reply with JSON "
+    "Last.fm and MusicBrainz. Songs are judged by how they sound, not by genre or era, so use "
+    "lowercase sound, mood, energy, texture, instrument or situation words (such as 'chill', "
+    "'mellow', 'funky', 'groovy', 'dreamy', 'energetic', 'lo-fi', 'instrumental', 'piano', "
+    "'female vocals', 'late night'). Only use a genre or era word (like 'rap' or '80s') if "
+    "the person named that genre or era. Reply with JSON "
     'only: {"tags": {"tag": weight 0.1-1.0, ...}, "avoid": ["tag", ...], '
     '"years": [from, to] or null, "note": "one short sentence"}. Use 5-15 tags, most important '
     "highest. Put things the person rules out in avoid. Never name specific songs or artists."
@@ -452,10 +456,18 @@ def translate(
     api_key: str = "",
     model: str = DEFAULT_MODEL,
     http: httpx.Client | None = None,
+    classes: vibes.TagClasses | None = None,
 ) -> Recipe:
     if engine == "offline" or (engine == "auto" and not api_key):
-        return translate_offline(text)
-    return translate_claude(text, api_key, model=model, http=http)
+        recipe = translate_offline(text)
+    else:
+        recipe = translate_claude(text, api_key, model=model, http=http)
+    # Judge songs by sound: genre / era words only if you typed them (metadata/vibes.py)
+    cls = classes or vibes.TagClasses()
+    recipe.tags = vibes.vibe_only(recipe.tags, text, cls)
+    recipe.avoid = vibes.vibe_only_avoid(recipe.avoid, text, cls)
+    recipe.tags = {t: w for t, w in recipe.tags.items() if t not in recipe.avoid}
+    return recipe
 
 
 # ---------------------------------------------------------------------------
@@ -474,7 +486,7 @@ class TagReport:
 def library_tag_counts(descriptors: dict[str, Descriptors], threshold: float = 0.3) -> Counter:
     counts: Counter = Counter()
     for d in descriptors.values():
-        for t, w in d.combined.items():
+        for t, w in d.sound.items():
             if w >= threshold:
                 counts[t] += 1
     return counts
@@ -581,7 +593,7 @@ def example_tags(
     rec_of = {
         r[0]: r[1] for r in db.conn.execute("SELECT uri, recording_id FROM recording_members")
     }
-    vecs = [descriptors[rec_of[u]].combined for u in uris if rec_of.get(u) in descriptors]
+    vecs = [descriptors[rec_of[u]].sound for u in uris if rec_of.get(u) in descriptors]
     vecs = [v for v in vecs if v]
     if not vecs:
         return []

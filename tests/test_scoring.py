@@ -146,7 +146,7 @@ def test_broad_definitions_are_capped(db, lib):
             for i in range(5)
         ],
     )
-    d = draft_by_name(sc.build_drafts(db, descriptors=lib))["Everything"]
+    d = draft_by_name(sc.build_drafts(db, descriptors=lib, coverage=False))["Everything"]
     tagged = sum(1 for v in lib.values() if v.by_source)
     assert len(d.include) <= int(sc.MAX_SHARE * tagged) + 1
     assert any("capped" in n for n in d.notes)

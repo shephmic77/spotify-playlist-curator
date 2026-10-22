@@ -31,7 +31,11 @@ from playlist_curator.crate.inventory import (
 )
 from playlist_curator.curator.analysis import analyze
 from playlist_curator.metadata.descriptors import coverage, enrich
-from playlist_curator.metadata.providers import LastfmProvider, MusicBrainzProvider
+from playlist_curator.metadata.providers import (
+    AcousticBrainzProvider,
+    LastfmProvider,
+    MusicBrainzProvider,
+)
 from playlist_curator.spotify.auth import AuthError, TokenManager, TokenStore, login
 from playlist_curator.spotify.client import SpotifyAPIError, SpotifyClient
 from playlist_curator.storage.database import Database, purge_data
@@ -398,6 +402,12 @@ def cmd_enrich(settings: Settings, args: argparse.Namespace) -> int:
             providers.append(
                 MusicBrainzProvider(db, MusicBrainzProvider.make_http(settings.musicbrainz_contact))
             )
+        if args.source in ("all", "acousticbrainz"):  # needs MusicBrainz matches, so last
+            providers.append(
+                AcousticBrainzProvider(
+                    db, AcousticBrainzProvider.make_http(settings.musicbrainz_contact)
+                )
+            )
         try:
             stats = enrich(db, providers, limit=args.limit, refresh=args.refresh, progress=print)
         except KeyboardInterrupt:
@@ -574,8 +584,12 @@ def build_parser() -> argparse.ArgumentParser:
         func=cmd_local_files
     )
 
-    p = sub.add_parser("enrich", help="fetch tags from MusicBrainz and Last.fm")
-    p.add_argument("--source", choices=["all", "musicbrainz", "lastfm"], default="all")
+    p = sub.add_parser(
+        "enrich", help="fetch tags (Last.fm, MusicBrainz) and audio data (AcousticBrainz)"
+    )
+    p.add_argument(
+        "--source", choices=["all", "musicbrainz", "lastfm", "acousticbrainz"], default="all"
+    )
     p.add_argument("--limit", type=int, help="only the first N recordings (for a quick test)")
     p.add_argument("--refresh", action="store_true", help="ignore cached results")
     p.set_defaults(func=cmd_enrich)

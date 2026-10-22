@@ -12,7 +12,11 @@ from typing import Any
 from playlist_curator.config import WRITE_SCOPES, Settings
 from playlist_curator.crate import deduplication as dedup
 from playlist_curator.curator import maintenance as mt
-from playlist_curator.metadata.providers import LastfmProvider, MusicBrainzProvider
+from playlist_curator.metadata.providers import (
+    AcousticBrainzProvider,
+    LastfmProvider,
+    MusicBrainzProvider,
+)
 from playlist_curator.spotify.auth import AuthError, TokenManager, TokenStore
 from playlist_curator.spotify.client import SpotifyAPIError, SpotifyClient
 from playlist_curator.storage.database import Database
@@ -35,6 +39,9 @@ def _providers(db: Database, settings: Settings) -> list[Any]:
     if settings.lastfm_api_key:
         out.append(LastfmProvider(db, LastfmProvider.make_http(), settings.lastfm_api_key))
     out.append(MusicBrainzProvider(db, MusicBrainzProvider.make_http(settings.musicbrainz_contact)))
+    out.append(
+        AcousticBrainzProvider(db, AcousticBrainzProvider.make_http(settings.musicbrainz_contact))
+    )
     return out
 
 

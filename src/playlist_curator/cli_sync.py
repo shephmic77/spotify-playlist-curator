@@ -244,6 +244,50 @@ def cmd_release(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_start_over(settings: Settings, args: argparse.Namespace) -> int:
+    db = _db(settings)
+    if db is None:
+        return 1
+    with db:
+        reg = sync.managed(db)
+        n_ids = db.conn.execute("SELECT COUNT(*) FROM identities").fetchone()[0]
+        print(
+            "This will:\n"
+            f"  1. back up everything to {settings.data_dir / 'backups'}\n"
+            f"  2. remove the {len(reg)} playlist(s) this app created from your Spotify library\n"
+            f"  3. delete your {n_ids} playlist definition(s) with their example songs and "
+            "keep/reject decisions, the drafts, the old-playlist descriptions and proposals\n"
+            "Kept: your library, your original playlists, Liked Songs, duplicate decisions, "
+            "fetched tags and your tag choices.\n"
+        )
+        if reg and not _can_write(settings):
+            return 1
+        if (
+            not args.yes
+            and input("Type 'start over' to continue: ").strip().lower() != "start over"
+        ):
+            print("Cancelled. Nothing changed.")
+            return 1
+        client = _client(settings) if reg else None
+        out = sync.start_over(db, client, backup_dir=settings.data_dir / "backups", progress=print)
+    print(
+        f"\nRemoved {len(out['removed'])} playlist(s) from Spotify; wiped "
+        f"{out['wiped']['identities']} definition(s), {out['wiped']['feedback']} decision(s), "
+        f"{out['wiped']['playlist_intents']} old-playlist description(s)."
+    )
+    for f in out["failed"]:
+        print(
+            f"  ! couldn't remove {f['spotify_id']}: {f['error']} (delete it in Spotify; "
+            "the app will ignore it either way)"
+        )
+    print(
+        "Start your new collection:\n"
+        '  curator describe "chill, mellow, laid back" --like "Lavender Buds" --create "Chill"\n'
+        "  curator draft"
+    )
+    return 0 if not out["failed"] else 2
+
+
 def register(sub: Any) -> None:
     p = sub.add_parser("sync", help="preview (and with --apply, write) your playlists to Spotify")
     p.add_argument("--apply", action="store_true", help="write the previewed changes")
@@ -264,6 +308,12 @@ def register(sub: Any) -> None:
     q = ssub.add_parser("release", help="stop syncing a playlist (it stays in Spotify)")
     q.add_argument("playlist")
     q.set_defaults(func=cmd_release)
+
+    p = sub.add_parser(
+        "start-over", help="remove the app's playlists from Spotify and your playlist definitions"
+    )
+    p.add_argument("--yes", action="store_true")
+    p.set_defaults(func=cmd_start_over)
 
     p = sub.add_parser("rollback", help="restore a managed playlist to a saved state")
     p.add_argument("playlist")

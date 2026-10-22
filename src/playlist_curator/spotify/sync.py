@@ -458,3 +458,84 @@ def last_sync(db: Database) -> dict[str, Any] | None:
         "status": row["status"],
         "errors": json.loads(row["errors_json"] or "[]"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Start over: remove the app's playlists and your playlist definitions
+# ---------------------------------------------------------------------------
+
+RETIRED_KEY = "retired_playlist_ids"
+# User data wiped by a start-over (the backup keeps it). Duplicate decisions, the tag cache,
+# your tag classes, the imported library and the run logs are kept.
+WIPED_TABLES = (
+    "feedback_log",
+    "feedback",
+    "identity_examples",
+    "draft_members",
+    "draft_runs",
+    "playlist_snapshots",
+    "managed_playlists",
+    "identities",
+    "proposals",
+    "playlist_intents",
+)
+
+
+def retired_ids(db: Database) -> set[str]:
+    return set(json.loads(db.get_meta(RETIRED_KEY) or "[]"))
+
+
+def backup(db: Database, folder: Any, label: str) -> Any:
+    """Copy the whole database (SQLite online backup) before something irreversible."""
+    import sqlite3
+    from pathlib import Path
+
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = utcnow().replace(":", "").replace("-", "")[:15]
+    dest = folder / f"curator-{label}-{stamp}.sqlite3"
+    out = sqlite3.connect(dest)
+    try:
+        db.conn.backup(out)
+    finally:
+        out.close()
+    return dest
+
+
+def start_over(
+    db: Database,
+    client: SpotifyClient | None,
+    *,
+    backup_dir: Any,
+    progress: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
+    """Back up, remove every app-made playlist from your Spotify library, wipe definitions.
+
+    Only playlists in the app's registry are removed (never your own playlists or Liked
+    Songs). Their ids are remembered so a later import never mistakes them for yours, even if
+    removing one failed."""
+    say = progress or (lambda _m: None)
+    path = backup(db, backup_dir, "before-start-over")
+    say(f"Backup saved: {path}")
+    reg = managed(db)
+    ids = [e["spotify_id"] for e in reg.values() if e["status"] != "released"]
+    removed, failed = [], []
+    if ids and client is not None:
+        for sid in ids:
+            _guard(db, sid)
+        say(f"Removing {len(ids)} app-made playlist(s) from your Spotify library ...")
+        for sid in ids:
+            try:
+                client.remove_playlists_from_library([sid])
+                removed.append(sid)
+            except SpotifyAPIError as exc:
+                failed.append({"spotify_id": sid, "error": exc.message})
+    db.set_meta(
+        RETIRED_KEY, json.dumps(sorted(retired_ids(db) | {e["spotify_id"] for e in reg.values()}))
+    )
+    counts = {}
+    with db.transaction():
+        for t in WIPED_TABLES:
+            counts[t] = db.conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            db.conn.execute(f"DELETE FROM {t}")
+    return {"backup": str(path), "removed": removed, "failed": failed, "wiped": counts}

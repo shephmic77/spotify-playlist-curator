@@ -308,7 +308,7 @@ def propose(
     desc = descriptors if descriptors is not None else load_descriptors(db)
     report = report if report is not None else analyze(db, descriptors=desc)
     ctx = _load_context(db)
-    vectors = {rid: d.combined for rid, d in desc.items() if d.by_source}
+    vectors = {rid: v for rid, d in desc.items() if (v := d.sound)}
     for rid, d in desc.items():  # prefer MusicBrainz original year when known
         y = d.facts.get("first_release_year")
         if y and (rid not in ctx["years"] or y < ctx["years"][rid]):

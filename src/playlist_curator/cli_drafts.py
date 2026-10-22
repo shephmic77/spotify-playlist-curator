@@ -12,7 +12,9 @@ from playlist_curator.curator import describe as ds
 from playlist_curator.curator import identities as idn
 from playlist_curator.curator import intents as it
 from playlist_curator.curator import scoring as sc
+from playlist_curator.metadata import vibes
 from playlist_curator.metadata.descriptors import load_descriptors
+from playlist_curator.metadata.vibes import load_classes
 from playlist_curator.storage.database import Database
 
 
@@ -39,6 +41,7 @@ def cmd_describe(settings: Settings, args: argparse.Namespace) -> int:
                 engine=args.engine,
                 api_key=settings.anthropic_api_key,
                 model=settings.anthropic_model,
+                classes=load_classes(db),
             )
         except ds.DescribeError as exc:
             print(exc, file=sys.stderr)
@@ -118,25 +121,37 @@ def cmd_draft(settings: Settings, args: argparse.Namespace) -> int:
     if db is None:
         return 1
     with db:
+        if args.coverage:
+            sc.set_coverage(db, args.coverage == "on")
         if not idn.list_identities(db):
-            print("No playlists defined yet. Accept proposals or use `curator describe`.")
+            print('No playlists defined yet. Make one: curator describe "..." --create "Name"')
             return 1
         res = sc.build_drafts(db)
+        cov = sc.coverage_enabled(db)
     total = len(res.unassigned) + len({s.recording_id for d in res.drafts for s in d.include})
     print(
         f"Draft #{res.run_id}: {len(res.drafts)} playlists from {total} songs. "
         "Nothing was sent to Spotify.\n"
     )
-    print(f"  {'playlist':<28} {'songs':>5} {'review':>6}  threshold")
+    print(f"  {'playlist':<28} {'songs':>5} {'weak':>5} {'review':>6}  threshold")
     for d in sorted(res.drafts, key=lambda x: x.identity.name.lower()):
         th = f"{d.threshold:.2f}" if d.threshold is not None else "hand-picked"
-        print(f"  {d.identity.name[:28]:<28} {len(d.include):>5} {len(d.review):>6}  {th}")
+        print(
+            f"  {d.identity.name[:28]:<28} {len(d.include):>5} {d.weak:>5} {len(d.review):>6}  {th}"
+        )
         for n in d.notes:
             if not n.startswith("hand-picked"):
                 print(f"      · {n}")
     print(
-        f"\n  Songs in no playlist: {len(res.unassigned)}"
-        f" ({res.untagged} have no tags at all, so they can't be matched)"
+        "\n  'weak' = songs that cleared no playlist's bar and went to their closest match, so "
+        "every song has a home"
+        if cov
+        else "\n  Every-song-somewhere is off (--coverage on)."
+    )
+    print(
+        f"  Songs in no playlist: {len(res.unassigned)}"
+        f" ({res.untagged} have no data on the song at all, so they can't be judged;"
+        ' add them by hand: curator feedback "Name" essential "Song")'
     )
     moved = {k: v for k, v in res.changes.items() if v["added"] or v["removed"]}
     if moved:
@@ -245,6 +260,88 @@ def cmd_drafts_unassigned(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+# --- tags -----------------------------------------------------------------------------------
+
+
+def cmd_tags(settings: Settings, args: argparse.Namespace) -> int:
+    from collections import Counter
+
+    db = _db(settings)
+    if db is None:
+        return 1
+    with db:
+        classes = load_classes(db)
+        counts: Counter = Counter()
+        for d in load_descriptors(db).values():
+            seen = set()
+            for src in vibes.SONG_SOURCES:
+                for t, w in (d.by_source.get(src) or {}).items():
+                    if w >= 0.3:
+                        seen.add(t)
+            counts.update(seen)
+    by_class: dict[str, list[tuple[str, int]]] = {}
+    for t, n in counts.most_common():
+        by_class.setdefault(classes.of(t), []).append((t, n))
+    print(
+        "Tags on your songs themselves, by how they're read. vibe = always counts; genre / era "
+        "= only in playlists that ask for them; other = counts as half a vibe word; ignore = "
+        "never.\n"
+    )
+    for cls in [args.cls] if args.cls else ["vibe", "other", "genre", "era", "ignore"]:
+        items = by_class.get(cls, [])
+        print(f"{cls} ({len(items)} tags):")
+        line = ", ".join(
+            f"{t}{'*' if t in classes.overrides else ''} ({n})" for t, n in items[: args.top]
+        )
+        print(f"  {line or '-'}\n")
+    print('* = your choice. Change one: curator tags set "indie" vibe   (or ... default)')
+    return 0
+
+
+def cmd_tags_set(settings: Settings, args: argparse.Namespace) -> int:
+    db = _db(settings)
+    if db is None:
+        return 1
+    with db:
+        vibes.set_class(db, args.tag, None if args.cls == "default" else args.cls)
+        now = load_classes(db).of(args.tag.strip().lower())
+    print(f"'{args.tag}' is now read as: {now}. Rebuild drafts to use it: curator draft")
+    return 0
+
+
+def cmd_tags_song(settings: Settings, args: argparse.Namespace) -> int:
+    db = _db(settings)
+    if db is None:
+        return 1
+    with db:
+        rows = db.conn.execute(
+            "SELECT recording_id, title, artists_json FROM recordings WHERE title LIKE ? "
+            "ORDER BY title LIMIT 5",
+            (f"%{args.title}%",),
+        ).fetchall()
+        if not rows:
+            print(f"No song matches {args.title!r}")
+            return 1
+        desc = load_descriptors(db)
+        classes = load_classes(db)
+        for r in rows:
+            d = desc.get(r["recording_id"])
+            prof = vibes.profile(d.by_source if d else {}, classes)
+            print(f"{r['title']} — {', '.join(__import__('json').loads(r['artists_json']))}")
+            print(f"  judged by: {prof.evidence}")
+            top = sorted(prof.vibe.items(), key=lambda kv: -kv[1])[:12]
+            print("  sounds:   " + (", ".join(f"{t} {w:.2f}" for t, w in top) or "-"))
+            labs = sorted(prof.labels.items(), key=lambda kv: -kv[1])[:8]
+            print(
+                "  labels:   "
+                + (", ".join(f"{t} {w:.2f}" for t, w in labs) or "-")
+                + "   (only count in playlists that ask for them)"
+            )
+            if d and d.facts.get("ab_features"):
+                print(f"  audio:    {d.facts['ab_features']}  (AcousticBrainz)")
+    return 0
+
+
 def register(sub: Any) -> None:
     p = sub.add_parser("describe", help="turn your own words into a playlist definition")
     p.add_argument("text", help='e.g. "music to study to, chill, lyrics ok but not distracting"')
@@ -266,9 +363,26 @@ def register(sub: Any) -> None:
     p.add_argument("--kind", choices=it.KINDS, default="mood")
     p.set_defaults(func=cmd_describe)
 
-    sub.add_parser("draft", help="fill your playlists with matching songs (drafts)").set_defaults(
-        func=cmd_draft
+    p = sub.add_parser("draft", help="fill your playlists with matching songs (drafts)")
+    p.add_argument(
+        "--coverage",
+        choices=["on", "off"],
+        help="every song in at least one playlist (default on; saved)",
     )
+    p.set_defaults(func=cmd_draft)
+
+    t = sub.add_parser("tags", help="how tags are read: vibe / genre / era / ignore")
+    t.add_argument("--class", dest="cls", choices=[*vibes.CLASSES, "other"])
+    t.add_argument("--top", type=int, default=40)
+    t.set_defaults(func=cmd_tags)
+    ts = t.add_subparsers(dest="tags_command")
+    q = ts.add_parser("set", help="reclassify a tag (your choice wins)")
+    q.add_argument("tag")
+    q.add_argument("cls", choices=[*vibes.CLASSES, "default"])
+    q.set_defaults(func=cmd_tags_set)
+    q = ts.add_parser("song", help="how one song is judged (its own vibe, labels, source)")
+    q.add_argument("title")
+    q.set_defaults(func=cmd_tags_song)
 
     d = sub.add_parser("drafts", help="look at the latest draft playlists")
     d.set_defaults(func=cmd_drafts_summary)

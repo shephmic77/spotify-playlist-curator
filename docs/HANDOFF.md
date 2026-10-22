@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.0.0)
+# Handoff: Spotify Playlist Curator (v1.1.0)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then the docs it links.
@@ -29,7 +29,7 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done** and running on his PC. 21 playlists live in Spotify. 213 tests
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 230 tests
 pass, `ruff` clean. Version 1.0.0, tagged `v1.0.0`.
 
 ---
@@ -55,7 +55,7 @@ working copy. Nothing for this project lives elsewhere on the PC.
 
 | File | What it is | Safe to delete? |
 |---|---|---|
-| `curator.sqlite3` | The whole app state: crate, tags cache, playlist definitions, feedback, drafts, Spotify registry, snapshots, run logs (schema v8) | **No.** Feedback, decisions and the registry of app-made playlists are irreplaceable. Back it up before experiments |
+| `curator.sqlite3` | The whole app state: crate, tags cache, playlist definitions, feedback, drafts, Spotify registry, snapshots, run logs (schema v9) | **No.** Feedback, decisions and the registry of app-made playlists are irreplaceable. Back it up before experiments |
 | `.tokens.json` | Spotify OAuth tokens (owner-only permissions) | Yes (then `curator auth login` again) |
 | `intents.json` | His descriptions of what each old playlist was for (also imported into the DB) | Keep as a record |
 | `run_maintenance.cmd` | Wrapper Task Scheduler runs (cd + python -m ... maintain --scheduled) | Re-created by `curator maintain schedule --install` |
@@ -103,8 +103,9 @@ spotify-playlist-curator/
 │   │   └── inventory.py      read-only summaries for CLI/UI
 │   ├── metadata/
 │   │   ├── tags.py           tag cleaning, normalization, weighting
-│   │   ├── providers.py      MusicBrainz + Last.fm clients, rate limits, cache
-│   │   └── descriptors.py    per-recording descriptors from cache; `enrich` runner
+│   │   ├── providers.py      MusicBrainz, Last.fm, AcousticBrainz clients, rate limits, cache
+│   │   ├── descriptors.py    per-recording descriptors from cache; `enrich` runner
+│   │   └── vibes.py          judge songs individually: tag classes, song profiles
 │   ├── curator/
 │   │   ├── analysis.py       report on old playlists
 │   │   ├── intents.py        his descriptions of old playlists (evidence)
@@ -114,7 +115,7 @@ spotify-playlist-curator/
 │   │   ├── scoring.py        per-playlist scoring, adaptive thresholds, drafts
 │   │   ├── feedback.py       decisions, undo, avoid-tag suggestions, stats, holdout check
 │   │   └── maintenance.py    import -> tag new -> redraft -> plan -> drift guards -> apply
-│   ├── storage/database.py   SQLite schema (append-only MIGRATIONS, now v8), queries, purge
+│   ├── storage/database.py   SQLite schema (append-only MIGRATIONS, now v9), queries, purge
 │   ├── cli.py                `curator` entry point; registers the cli_* modules
 │   ├── cli_concepts.py       intents / propose / proposals / identities
 │   ├── cli_drafts.py         describe / draft / drafts
@@ -122,7 +123,7 @@ spotify-playlist-curator/
 │   ├── cli_sync.py           sync / rollback / local-files
 │   ├── cli_maintain.py       maintain / status / settings / schedule
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    213 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    230 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -188,7 +189,7 @@ running, ok, held, partial, failed, stopped) and summarized to `data/reports/`.
 
 ---
 
-## 5. Database (SQLite, schema v8)
+## 5. Database (SQLite, schema v9)
 
 User data (never rebuild or drop): `dedup_decisions`, `playlist_intents`, `identities`,
 `identity_examples`, `feedback`, `feedback_log`, `managed_playlists`, `playlist_snapshots`.
@@ -228,7 +229,9 @@ curator stats --evaluate                # acceptance, churn, holdout agreement
 curator proposals                       # pending ideas (#24 Jazz / Oldies is pending)
 
 # library + tags
-curator import [--force]   curator enrich [--source lastfm|musicbrainz]   curator analyze
+curator import [--force]   curator enrich [--source lastfm|musicbrainz|acousticbrainz]
+curator tags   curator tags song "Title"   curator tags set "tag" vibe|genre|era|ignore|default
+curator draft --coverage on|off   curator start-over   curator analyze
 curator duplicates review   curator inventory   curator local-files
 
 # settings / schedule / auth
@@ -237,7 +240,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 213 tests, no network
+pytest                       # 230 tests, no network
 ruff check . && ruff format --check .
 ```
 
@@ -260,18 +263,32 @@ ruff check . && ruff format --check .
 
 ---
 
-## 8. Current state (2026-10-19)
+## 8. Current state (2026-10-21)
 
-- Library: 1,248 unique recordings from Liked Songs + 31 old playlists (24 described in
-  `intents.json`); 5 local files; Last.fm tags for ~1,220; MusicBrainz backfill only partly done.
-- 21 approved playlists, all created in Spotify and managed: 80s, Acoustic, Calm, Car with
-  parents, Classical, EDM, Folk / Singer Songwriter, Funky, Games ambience & study, Guitar,
-  Heavier, Indie chill, Indie Pop / Indie, Jazzy, Pop, Rap, Regular Show*, Soul / Funk,
-  Surf's up*, Weird cool songs*, Workout (* hand-picked).
-- Workout is the only playlist reviewed song by song (44 decisions).
-- Maintenance: auto-apply **on**, defaults otherwise, scheduled daily 09:00. Run #2 (manual,
-  2026-10-18) applied ~100 additions across 16 playlists, mostly because a stopped run #1 had
-  added MusicBrainz tags for older songs; one-time jump.
+**Starting over.** On 2026-10-21 the owner decided to scrap the 21-playlist collection and
+define a new one himself, with two new rules now built in:
+
+1. **Every song judged as an individual, by its own sound** (`metadata/vibes.py`): song-level
+   tags + AcousticBrainz audio measures as vibe words; artist tags not used (flagged fallback
+   only); genre / era count only in playlists that name them ("80s", "rap").
+2. **Every song in at least one playlist** (coverage; leftovers go to their closest playlist
+   as weak fits).
+
+Steps on his PC: `git pull` → `curator start-over` (backup to `data\backups\`, removes the 21
+app-made playlists from Spotify, wipes definitions, decisions, old-playlist descriptions and
+proposals) → `curator enrich` (finishes the MusicBrainz backfill, ~1 h, then AcousticBrainz,
+which needs MusicBrainz ids) → define the new playlists with `curator describe ... --like ...
+--create NAME` → `curator draft` → `curator review` → `curator sync --apply`.
+
+Playlists he has in mind (2026-10-21): 80s, Chill, Indie, Calm / Sleep, Study, Classical,
+Workout, Soul / Funk / Jazz, Rap, Heavier, Guitar, Drums & Bass (songs that highlight those
+instruments, e.g. "Can't Stop"), Gaming / Hype, Country / Folk, EDM, Car, 90s–2000s Rock /
+Grunge; ideas offered: Late Night, Golden Hour, Feel-Good, Sad, Groove, Rainy Day, Dreamy,
+Slow Jams / R&B, Instrumental, Morning.
+
+Library: 1,248 recordings, 31 old playlists, 5 local files. Maintenance stays scheduled daily
+09:00 with auto-apply on; with no playlists defined it changes nothing, and it never creates
+playlists.
 
 ---
 
@@ -283,11 +300,11 @@ ruff check . && ruff format --check .
    `Set-ScheduledTask -TaskName "Playlist Curator maintenance" -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable)`
    and ideally make `curator maintain schedule --install` apply this itself (needs testing on
    Windows; `cli_maintain.py`).
-2. **Broad playlists**: Indie chill (256), Car with parents (240), Guitar (221) sit near the
-   20% cap. Sharpen with `describe --apply`, required/avoided tags, or song review.
-3. **Redundant pairs** flagged by `curator draft`: Jazzy ⊃ Soul / Funk, Calm ⊃ Classical,
-   Guitar ≈ Acoustic ≈ Folk, Guitar ≈ Indie chill. Merge or differentiate.
-4. **Pending proposal #24 "Jazz / Oldies"**: accept or reject.
+2. **Instrument playlists** (Guitar, Drums & Bass) have little to match on: tags rarely name
+   instruments and AcousticBrainz has no instrument classifier. They depend on example songs.
+3. ~~Broad / redundant playlists, proposal #24~~: obsolete after the start-over.
+4. Tag classes are rules (`vibes.py`); check `curator tags` after enrich and reclassify any
+   that are read wrongly (`curator tags set TAG vibe|genre|era|ignore`).
 5. **MusicBrainz backfill**: `curator enrich --source musicbrainz` (~1 h at 1 req/s, resumable).
    Follow with `curator maintain --preview`: tags shift scores and cause a jump.
 6. Possible extra guard: hold everything when many playlists change at once but the library

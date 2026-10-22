@@ -15,6 +15,7 @@ not a bug; the inventory reports how many playlists it affects.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import Counter
 from collections.abc import Callable
@@ -134,6 +135,8 @@ def import_library(
         summaries: dict[str, PlaylistSummary] = {}
         # Playlists the app created (Phase 6) are output, not source material: skip them
         managed_ids = {r[0] for r in db.conn.execute("SELECT spotify_id FROM managed_playlists")}
+        # ... including ones from before a start-over, in case removing them failed
+        managed_ids |= set(json.loads(db.get_meta("retired_playlist_ids") or "[]"))
         for raw in client.iter_my_playlists():
             if raw and raw.get("id") and raw["id"] not in managed_ids:
                 summaries.setdefault(raw["id"], parse_playlist_summary(raw))

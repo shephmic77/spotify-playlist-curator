@@ -201,6 +201,19 @@ class FakeSpotify:
             return httpx.Response(
                 201 if m == "POST" else 200, json={"snapshot_id": p["snapshot_id"]}
             )
+        if m == "DELETE" and path == "/me/library":
+            uris = request.url.params.get("uris", "").split(",")
+            assert 0 < len(uris) <= 40
+            self.write_bodies.append((m, path, {"uris": uris}))
+            gone = {u.removeprefix("spotify:playlist:") for u in uris if "playlist:" in u}
+            self.lib["playlists"] = [p for p in self.lib["playlists"] if p["id"] not in gone]
+            tracks = {u for u in uris if u.startswith("spotify:track:")}
+            self.lib["liked"] = [
+                e
+                for e in self.lib["liked"]
+                if (self._track(e["track"]) or {}).get("uri") not in tracks
+            ]
+            return httpx.Response(200)
         if m == "POST" and path == "/me/playlists":
             body = json.loads(request.content)
             self.write_bodies.append((m, path, body))

@@ -20,6 +20,8 @@ transferring data to other services. Three options were considered:
 | MusicBrainz (`/ws/2/isrc/{isrc}`, `/ws/2/artist/{mbid}`) | Recording + artist community tags and genres, recording first-release date, MusicBrainz ids | one ISRC per request; artist MBID | ≤ 1 request / 1.1 s; `User-Agent: PlaylistCurator/<ver> ( <contact> )`; 503 → back off | trimmed: tag names + counts, first-release date, ids. Refreshed after 90 days |
 | Last.fm (`track.getTopTags`, `artist.getTopTags`) | Track and artist top tags | artist name + cleaned title; artist name | API key required (`LASTFM_API_KEY`); non-commercial use; ≤ 4 requests/s; error 29 → back off; HTTP `Cache-Control` honoured | top ≤ 40 tag names + counts per lookup (well under the 100 MB cap). Refreshed per `Cache-Control`, else 30 days |
 
+| AcousticBrainz (`/api/v1/high-level`, bulk) | Audio-derived classifier probabilities per recording: danceable, relaxed, happy, sad, aggressive, party, acoustic, electronic, instrumental | MusicBrainz recording ids only (≤ 25 per request) | `X-RateLimit-*` headers honoured (typically 10 requests / 10 s); same User-Agent as MusicBrainz | the 9 probabilities per recording. Refreshed after a year (the dataset stopped growing in 2022; data CC0) |
+
 Attribution: the CLI (`enrich`, `analyze`) and the UI's Playlist analysis tab credit
 MusicBrainz and Last.fm with links.
 
@@ -34,9 +36,16 @@ is used under its API Terms (non-commercial, attribution, 100 MB cap).
   synthpop), decades unified ("1980s", "80's", "eighties" → 80s), and tagger-centric tags dropped
   ("seen live", "favorites", "under 2000 listeners", the artist's own name).
 - Each source's counts are scaled to 0–1 against its strongest tag; tags under 0.1 are dropped.
-- Per recording: `combined = max(song-level weight, 0.6 × artist-level weight)`. Song-level
-  sources: Last.fm track tags, MusicBrainz recording tags. Artist-level: Last.fm and MusicBrainz
-  artist tags.
+- **For matching songs to playlists, each song is judged as an individual**
+  (`metadata/vibes.py`, owner's decision 2026-10-21): only song-level sources count (Last.fm
+  track tags, MusicBrainz recording tags, AcousticBrainz audio measures). Every tag is read as
+  *vibe* (always counts), *genre* or *era* (count only in playlists whose definition mentions
+  them), *ignore*, or *other* (half weight). Sound-describing genres add a softer vibe word
+  (jazz → jazzy 0.6, metal → heavy 0.6). AcousticBrainz probabilities ≥ 0.6 become vibe words
+  at 0.7 × (p − 0.5) / 0.5. Artist tags are used only for songs with no song-level data at all,
+  at 0.5 weight and flagged. The owner's own tag classes (`tag_classes`) override the rules.
+- `combined = max(song-level weight, 0.6 × artist-level weight)` is still used to describe old
+  playlists (`curator analyze`), not for matching.
 - Original release year = earliest of MusicBrainz first-release year and Spotify release year
   (compilations and remasters otherwise make old songs look new).
 - No tag is ever inferred. A song with no tags is "untagged" and excluded from tag-based measures.

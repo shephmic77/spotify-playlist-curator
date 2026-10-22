@@ -101,8 +101,13 @@ def test_enrich_and_analyze_commands(env, client, monkeypatch, capsys):
         def __init__(self, db, http, key, **kw):
             super().__init__(db, apis.http(), key, min_interval=0)
 
+    class FastAB(prov.AcousticBrainzProvider):
+        def __init__(self, db, http, **kw):
+            super().__init__(db, apis.http(), min_interval=0)
+
     monkeypatch.setattr(cli, "MusicBrainzProvider", FastMB)
     monkeypatch.setattr(cli, "LastfmProvider", FastLFM)
+    monkeypatch.setattr(cli, "AcousticBrainzProvider", FastAB)
 
     assert cli.main(["import"]) == 0
     capsys.readouterr()

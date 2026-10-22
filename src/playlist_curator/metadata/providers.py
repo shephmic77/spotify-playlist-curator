@@ -35,6 +35,7 @@ log = logging.getLogger(__name__)
 
 MB_BASE = "https://musicbrainz.org/ws/2"
 LASTFM_BASE = "https://ws.audioscrobbler.com/2.0/"
+AB_BASE = "https://acousticbrainz.org/api/v1"
 
 
 class ProviderError(RuntimeError):
@@ -444,4 +445,127 @@ class LastfmProvider(_HTTPProvider):
         outcome.tags = {k: v for k, v in outcome.tags.items() if v}
         outcome.found = bool(outcome.tags)
         outcome.from_cache = self.requests == before
+        return outcome
+
+
+# ---------------------------------------------------------------------------
+# AcousticBrainz: audio-derived measures of the song itself
+# ---------------------------------------------------------------------------
+
+# classifier -> (class whose probability we read, vibe word it becomes)
+AB_CLASSIFIERS: dict[str, tuple[str, str]] = {
+    "danceability": ("danceable", "danceable"),
+    "mood_relaxed": ("relaxed", "relaxed"),
+    "mood_happy": ("happy", "happy"),
+    "mood_sad": ("sad", "sad"),
+    "mood_aggressive": ("aggressive", "aggressive"),
+    "mood_party": ("party", "party"),
+    "mood_acoustic": ("acoustic", "acoustic"),
+    "mood_electronic": ("electronic", "synth"),
+    "voice_instrumental": ("instrumental", "instrumental"),
+}
+AB_WEIGHT = 0.7  # audio classifiers are useful but noisy: they count less than song tags
+AB_MIN_PROBABILITY = 0.6  # below this the classifier isn't saying much either way
+AB_BULK = 25  # documented maximum recording ids per request
+
+
+def ab_vibes(features: dict[str, float]) -> dict[str, float]:
+    """Classifier probabilities -> vibe weights. Only confident readings count."""
+    out = {}
+    for _clf, (cls, word) in AB_CLASSIFIERS.items():
+        p = features.get(cls)
+        if p is not None and p >= AB_MIN_PROBABILITY:
+            out[word] = round(AB_WEIGHT * (p - 0.5) / 0.5, 4)
+    return out
+
+
+class AcousticBrainzProvider(_HTTPProvider):
+    """High-level audio descriptors from AcousticBrainz, looked up by MusicBrainz recording id.
+
+    AcousticBrainz analysed audio files submitted by its community and stopped collecting in
+    2022; its data (CC0) and API remain available. Songs need a MusicBrainz match first (run
+    MusicBrainz before this). Nothing from Spotify is sent: only MusicBrainz ids.
+    """
+
+    name = "acousticbrainz"
+    ttl = timedelta(days=365)  # the dataset no longer changes
+    not_found_ttl = timedelta(days=180)
+
+    def __init__(self, db: Database, http: httpx.Client | None, **kw: Any) -> None:
+        kw.setdefault("min_interval", 1.0)  # documented typical limit: 10 requests / 10 s
+        super().__init__(db, http, **kw)
+        self._mb = MusicBrainzProvider(db, None, min_interval=0)
+
+    @staticmethod
+    def make_http(contact: str) -> httpx.Client:
+        return httpx.Client(
+            timeout=30.0,
+            headers={"User-Agent": f"PlaylistCurator/{__version__} ( {contact} )"},
+        )
+
+    def _mbids(self, q: RecordingQuery) -> list[str]:
+        out = self._mb.lookup(q, offline=True)
+        if out is None or not out.found:
+            return []
+        return [m.lower() for m in out.facts.get("mb_recording_ids", [])][:3]
+
+    def _fetch_bulk(self, mbids: list[str]) -> None:
+        resp = self._get(f"{AB_BASE}/high-level", {"recording_ids": ";".join(mbids)})
+        if resp.status_code != 200:
+            raise ProviderError(f"acousticbrainz: HTTP {resp.status_code}")
+        body = resp.json()
+        for mbid in mbids:
+            docs = body.get(mbid) or {}
+            doc = docs.get("0") or (next(iter(docs.values())) if docs else None)
+            hl = (doc or {}).get("highlevel") or {}
+            feats = {}
+            for clf, (cls, _word) in AB_CLASSIFIERS.items():
+                p = ((hl.get(clf) or {}).get("all") or {}).get(cls)
+                if isinstance(p, int | float):
+                    feats[cls] = round(float(p), 4)
+            if feats:
+                self.cache.put(f"mbid:{mbid}", "ok", {"features": feats}, self.ttl)
+            else:
+                self.cache.put(f"mbid:{mbid}", "not_found", None, self.not_found_ttl)
+        remaining = resp.headers.get("X-RateLimit-Remaining")
+        reset = resp.headers.get("X-RateLimit-Reset-In")
+        if remaining == "0" and reset and reset.isdigit():
+            self.sleep(min(float(reset) + 0.5, 60))
+
+    def prefetch(self, queries: list[RecordingQuery], progress: Callable[[str], None]) -> None:
+        """Fetch everything not cached yet, 25 recordings per request."""
+        todo = []
+        for q in queries:
+            for m in self._mbids(q):
+                if self.cache.get(f"mbid:{m}") is None:
+                    todo.append(m)
+        todo = list(dict.fromkeys(todo))
+        if todo:
+            progress(f"acousticbrainz: {len(todo)} recordings to fetch")
+        for i in range(0, len(todo), AB_BULK):
+            self._fetch_bulk(todo[i : i + AB_BULK])
+
+    def lookup(self, q: RecordingQuery, *, offline: bool = False) -> ProviderOutcome | None:
+        mbids = self._mbids(q)
+        if not mbids:
+            return ProviderOutcome(found=False)
+        before = self.requests
+        found = []
+        for m in mbids:
+            cached = self.cache.get(f"mbid:{m}", allow_expired=offline)
+            if cached is None and not offline:
+                self._fetch_bulk([m])
+                cached = self.cache.get(f"mbid:{m}")
+            if cached and cached[0] == "ok" and cached[1]:
+                found.append(cached[1]["features"])
+        if not found:
+            return ProviderOutcome(found=False, from_cache=self.requests == before)
+        # several MusicBrainz recordings of the same song: average what AcousticBrainz says
+        keys = {k for f in found for k in f}
+        avg = {k: sum(f.get(k, 0.0) for f in found) / sum(1 for f in found if k in f) for k in keys}
+        outcome = ProviderOutcome(found=True, from_cache=self.requests == before)
+        tags = ab_vibes(avg)
+        if tags:
+            outcome.tags["acousticbrainz"] = tags
+        outcome.facts["ab_features"] = {k: round(v, 3) for k, v in avg.items()}
         return outcome

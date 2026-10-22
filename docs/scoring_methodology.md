@@ -136,6 +136,16 @@ exactly their example songs):
    that at most 20 % of the tagged library qualifies (a definition that broad isn't an
    identity; the draft notes it). In ≥ threshold; review within 0.08 below.
 
+Song vectors here are the song's own sound (see `data_sources.md`): vibe words always, genre /
+era labels only for the playlist that names them (its similarity matrix includes just those
+label columns).
+
+**Coverage** (default on, `draft --coverage`): after all playlists are scored, every song that
+cleared no bar is placed in the auto-maintained playlist where score ÷ threshold is highest
+(×1.1 for the playlist it was in last draft, for stability), with the reason "closest match
+(weak fit)". Not where it was rejected; not into hand-picked playlists; songs with no data at
+all stay unplaced.
+
 Examples get no free pass, so misfits from old playlists can drop out. Overlapping drafts
 (≥ 70 % of the smaller playlist shared; top 10) are reported. Scores rank and explain; they are not
 probabilities.

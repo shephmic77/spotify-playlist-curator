@@ -62,8 +62,23 @@ All phases are complete. How each was built: [docs/project_plan.md](docs/project
   near-matches (e.g. a remaster with a new ISRC) and local files that look like catalog songs are
   *suggested* for you to confirm. Live, remix, edit, acoustic, sped-up and similar versions are
   never treated as duplicates. Your decisions are kept permanently and override the ISRC rule.
-- **Tags from MusicBrainz and Last.fm** (Phase 3a, `curator enrich`): genre, era and mood tags
-  for each song, fetched one song at a time within each service's rate limits and cached.
+- **Tags and audio data** (`curator enrich`): Last.fm and MusicBrainz tags, plus AcousticBrainz
+  audio measures (danceable, relaxed, happy, sad, aggressive, acoustic, electronic,
+  instrumental), fetched within each service's rate limits and cached.
+- **Every song judged as an individual, by how it sounds** (`metadata/vibes.py`): only tags on
+  the song itself and its audio measures count, as vibe words (chill, funky, mellow, upbeat,
+  dreamy, instrumental...). Artist-level tags aren't used (except as a flagged last resort for
+  songs with no song data). Genre and era words (rap, rock, 80s...) count **only in playlists
+  that ask for them**, so MF DOOM's "Lavender Buds" can land in Chill instead of Rap. See how a
+  song is read with `curator tags song "Lavender Buds"`; reclassify any tag with
+  `curator tags set "indie" vibe`.
+- **Every song has a home**: a song that clears no playlist's bar goes into the playlist it's
+  closest to, marked as a weak fit (`curator draft` shows how many). Never into a playlist
+  where you rejected it; hand-picked playlists never get extras. Turn off with
+  `curator draft --coverage off`.
+- **Start over** (`curator start-over`): backs up everything, removes the playlists this app
+  created from your Spotify library, and deletes your playlist definitions, decisions and
+  old-playlist descriptions, so you can define a new collection from scratch.
 - **A new collection, from scratch** (Phase 3b): describe what your old playlists were for
   (`curator intents`), then `curator propose` suggests concepts from those descriptions and
   from clusters in your library's tags, each with its evidence. Accepting one creates an
@@ -217,6 +232,11 @@ curator maintain            # import + tag new + redraft + compare (writes only 
 curator maintain status     # settings, schedule, recent runs, what's waiting for you
 curator maintain settings --auto-apply on [--max-changes 10 --max-share 0.25 --max-shrink 0.1]
 curator maintain schedule --install [--every weekly] [--at 09:00]   # or --remove
+curator tags [--class vibe]  # how tags are read: vibe / genre / era / ignore
+curator tags song "Title"   # how one song is judged (its own sound, labels, audio data)
+curator tags set "tag" vibe|genre|era|ignore|default
+curator draft --coverage on|off   # every song in at least one playlist (default on)
+curator start-over          # backup, remove the app's playlists from Spotify, wipe definitions
 curator purge               # delete local database + tokens; does not touch Spotify
 curator -v import           # debug logging
 ```
@@ -232,7 +252,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 213 tests; Spotify, MusicBrainz and Last.fm are mocked
+pytest            # 230 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
 ruff check . && ruff format --check .
 ```
 

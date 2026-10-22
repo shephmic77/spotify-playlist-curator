@@ -28,6 +28,7 @@ src/playlist_curator/
     tags.py            Tag cleaning and weighting
     providers.py       MusicBrainz + Last.fm clients, rate limits, cache
     descriptors.py     Per-recording descriptors from the cache; `enrich` runner
+    vibes.py           Judge songs individually: tag classes (vibe/genre/era/ignore), profiles
   curator/
     analysis.py        Existing-playlist report: profile, cohesion, outliers, drift, overlap
     intents.py         Your descriptions of old playlists (evidence, never instructions to keep)
@@ -70,7 +71,7 @@ SQLite (crate) + metadata providers + user identities/feedback
    ──► review UI ──► approved change set ──► spotify/sync (diff, apply, verify, log)
 ```
 
-## Database (schema v8)
+## Database (schema v9)
 
 | Table | Purpose |
 |---|---|
@@ -93,6 +94,7 @@ SQLite (crate) + metadata providers + user identities/feedback
 | `managed_playlists` | **user data** — playlists the app created: identity, Spotify id, status, last written URIs (to detect your manual edits) |
 | `playlist_snapshots` | **user data** — URIs of a managed playlist before/after each sync or rollback |
 | `sync_runs` | log of syncs with results and errors |
+| `tag_classes` | **user data** — your vibe / genre / era / ignore choice per tag, overriding `vibes.py` |
 | `maintenance_runs` | log of maintenance runs (manual / scheduled, preview / auto), what was applied and what was held |
 | `metadata_cache` | trimmed MusicBrainz / Last.fm responses keyed by provider + lookup key, with expiry. Descriptors are computed from it on demand |
 

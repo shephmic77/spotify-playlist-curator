@@ -327,6 +327,15 @@ MIGRATIONS: list[str] = [
         errors_json  TEXT
     );
     """,
+    # v9: judge songs by their own sound; your classification of tags (vibe / genre / era /
+    # ignore) overrides the built-in rules in metadata/vibes.py
+    """
+    CREATE TABLE tag_classes (
+        tag        TEXT PRIMARY KEY,
+        class      TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    );
+    """,
 ]
 
 

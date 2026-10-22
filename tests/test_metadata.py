@@ -351,3 +351,45 @@ def test_503_with_retry_after_zero_still_backs_off(db, apis):
     apis.injected.append(httpx.Response(503, headers={"Retry-After": "0"}))
     p.lookup(MIDNIGHT)
     assert sleeps and sleeps[0] >= 2
+
+
+# --- AcousticBrainz -----------------------------------------------------------------------
+
+
+def ab(db, apis, sleeps=None):
+    from playlist_curator.metadata.providers import AcousticBrainzProvider
+
+    return AcousticBrainzProvider(
+        db, apis.http(), sleep=(sleeps if sleeps is not None else []).append, min_interval=0
+    )
+
+
+def test_acousticbrainz_reads_audio_measures_in_bulk(fake, client, db, apis):
+    from playlist_curator.metadata.providers import ab_vibes
+
+    imported(client, db)
+    (_mbs, abs_) = enrich(db, [mb(db, apis), ab(db, apis)])
+    bulk = [c for c in apis.calls if c.startswith("acousticbrainz.org")]
+    assert len(bulk) == 1  # Midnight City, Take On Me, Africa: one request
+    assert abs_.found == 2  # Africa isn't in AcousticBrainz
+    desc = load_descriptors(db)
+    d = desc["isrc:FRZID1100001"]
+    assert d.by_source["acousticbrainz"]["danceable"] == ab_vibes({"danceable": 0.9})["danceable"]
+    assert "synth" in d.by_source["acousticbrainz"]  # mood_electronic
+    assert "relaxed" not in d.by_source["acousticbrainz"]  # 0.3: not confident, left out
+    assert d.facts["ab_features"]["danceable"] == 0.9
+    # cached: a second run sends nothing
+    n = len(apis.calls)
+    enrich(db, [ab(db, apis)])
+    assert len(apis.calls) == n
+
+
+def test_acousticbrainz_needs_a_musicbrainz_match_and_sends_only_its_id(db, apis):
+    out = ab(db, apis).lookup(MIDNIGHT)
+    assert out is not None and not out.found and apis.calls == []
+
+
+def test_ab_vibes_only_counts_confident_readings():
+    from playlist_curator.metadata.providers import ab_vibes
+
+    assert ab_vibes({"danceable": 0.55, "sad": 1.0}) == {"sad": 0.7}

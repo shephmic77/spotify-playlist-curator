@@ -40,3 +40,18 @@ def db(tmp_path) -> Database:
     database = Database(tmp_path / "test.sqlite3")
     yield database
     database.close()
+
+
+@pytest.fixture(autouse=True)
+def no_real_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests never talk to real services: any request not served by a fake fails at once."""
+    import httpx
+
+    real = httpx.HTTPTransport.handle_request
+
+    def refuse(self, request):
+        if request.url.host in ("127.0.0.1", "localhost", "::1"):  # the local login callback
+            return real(self, request)
+        raise RuntimeError(f"test tried to reach the real network: {request.url}")
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", refuse)

@@ -259,8 +259,8 @@ def suggest_avoid_tags(
         out = []
         for u in uris:
             d = descriptors.get(rec_of.get(u, ""))
-            if d and d.combined:
-                out.append(d.combined)
+            if d and d.sound:
+                out.append(d.sound)
         return out
 
     rejected, examples = vecs("exclude"), vecs("reference") + vecs("essential")

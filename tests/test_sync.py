@@ -34,6 +34,7 @@ def descriptors(db):
 @pytest.fixture
 def setup(fake, client, db):
     import_library(client, db, progress=lambda _m: None)
+    sc.set_coverage(db, False)  # these tests are about sync mechanics, not leftover placement
     desc = descriptors(db)
     night = idn.create_identity(db, "Night Drive", concept="synth at night")
     idn.edit_identity(db, night.identity_id, add_tags={"synthwave": 1.0, "80s": 0.6})

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import time
 from collections.abc import Callable, Iterable, Iterator
 from typing import Any, Protocol
@@ -262,6 +263,23 @@ class SpotifyClient:
             snapshot = self.add_items(playlist_id, rest)
         return snapshot
 
+    def remove_playlists_from_library(self, playlist_ids: Iterable[str]) -> None:
+        """Remove playlists from your library (Spotify's way of deleting your own playlist).
+
+        ``DELETE /me/library`` also removes saved *songs* when given track URIs, so this method
+        only ever builds ``spotify:playlist:`` URIs from bare playlist ids and refuses anything
+        that isn't one. It can't touch Liked Songs."""
+        ids = list(playlist_ids)
+        bad = [p for p in ids if not _PLAYLIST_ID.match(p)]
+        if bad:
+            raise ValueError(f"Not playlist ids: {bad[:3]}")
+        for chunk in _chunks(ids, LIBRARY_REMOVE_CHUNK):
+            self.request(
+                "DELETE",
+                "/me/library",
+                params={"uris": ",".join(f"spotify:playlist:{p}" for p in chunk)},
+            )
+
     def remove_items(
         self, playlist_id: str, uris: Iterable[str], snapshot_id: str | None = None
     ) -> str | None:
@@ -276,6 +294,10 @@ class SpotifyClient:
                 "snapshot_id"
             )
         return snapshot
+
+
+LIBRARY_REMOVE_CHUNK = 40  # documented maximum URIs per DELETE /me/library
+_PLAYLIST_ID = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def _parse_retry_after(value: str | None) -> float | None:

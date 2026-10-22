@@ -25,8 +25,16 @@ Example songs get no free pass: they're scored like any other song (minus themse
 misfit example from an old playlist can drop out. Hand-picked playlists aren't scored; they
 hold exactly their example songs.
 
+Songs are judged as individuals (``metadata/vibes.py``): only the song's own tags and audio
+measures count, as vibe words. Genre and era words count only in playlists whose definition
+mentions them; artist-level tags are a flagged last resort for songs with no song data.
+
+**Every song lands somewhere** (coverage): a song that clears no playlist's bar goes into the
+playlist it comes closest to, relative to that playlist's bar, marked as a weak fit. It never
+goes into a playlist where you rejected it, and hand-picked playlists never get extras.
+
 Scores are heuristics for ranking and explanation, **not probabilities**. ``evidence`` says
-how specific the tag data was (song-level tags, artist-level only, or none).
+where the song's data came from (song-level, artist-level fallback, or none).
 """
 
 from __future__ import annotations
@@ -41,6 +49,7 @@ import numpy as np
 
 from playlist_curator.crate.deduplication import ensure_current
 from playlist_curator.curator.identities import Identity, list_identities
+from playlist_curator.metadata import vibes
 from playlist_curator.metadata.descriptors import Descriptors, load_descriptors
 from playlist_curator.storage.database import Database, utcnow
 
@@ -57,6 +66,8 @@ REJECT_PENALTY = 0.80
 MAX_SHARE = 0.20  # a playlist may hold at most this share of the tagged library
 MAX_OVERLAPS_REPORTED = 10
 OVERLAP_REPORT = 0.7
+STICKY = 1.1  # a weak-fit song stays in last draft's playlist unless another is clearly closer
+WEAK_FIT = "closest match (weak fit)"
 
 
 @dataclass
@@ -77,6 +88,9 @@ class PlaylistDraft:
     include: list[SongScore] = field(default_factory=list)
     review: list[SongScore] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    scores: dict[str, SongScore] = field(default_factory=dict)  # every song (not stored)
+    excluded: set[str] = field(default_factory=set)
+    weak: int = 0  # songs placed here only so that every song is in some playlist
 
 
 @dataclass
@@ -99,8 +113,10 @@ class Library:
     rids: list[str]
     index: dict[str, int]
     vectors: dict[str, dict[str, float]]
-    matrix: np.ndarray  # L2-normalised rows over `tags`
+    raw: np.ndarray  # IDF-weighted rows over `tags` (not normalised)
     tags: list[str]
+    label_cols: np.ndarray  # True where the tag is a genre / era label
+    classes: vibes.TagClasses
     years: dict[str, int]
     evidence: dict[str, str]
     titles: dict[str, str]
@@ -111,6 +127,7 @@ class Library:
 def load_library(db: Database, descriptors: dict[str, Descriptors] | None = None) -> Library:
     ensure_current(db)
     desc = descriptors if descriptors is not None else load_descriptors(db)
+    classes = vibes.load_classes(db)
     titles: dict[str, str] = {}
     years: dict[str, int] = {}
     for r in db.conn.execute(
@@ -126,8 +143,9 @@ def load_library(db: Database, descriptors: dict[str, Descriptors] | None = None
     vectors, evidence = {}, {}
     for rid in rids:
         d = desc.get(rid)
-        vectors[rid] = d.combined if d else {}
-        evidence[rid] = "song" if d and d.has_song_level else ("artist" if vectors[rid] else "none")
+        prof = vibes.profile(d.by_source, classes) if d else None
+        vectors[rid] = prof.merged if prof else {}
+        evidence[rid] = prof.evidence if prof else "none"
         y = d.facts.get("first_release_year") if d else None
         if y and (rid not in years or y < years[rid]):
             years[rid] = y
@@ -138,8 +156,7 @@ def load_library(db: Database, descriptors: dict[str, Descriptors] | None = None
     for i, rid in enumerate(rids):
         for t, w in vectors[rid].items():
             m[i, tindex[t]] = w * idf[t]
-    norms = np.linalg.norm(m, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
+    label_cols = np.array([classes.is_label(t) for t in tags] or [False])
     rec_of_uri = {
         r[0]: r[1] for r in db.conn.execute("SELECT uri, recording_id FROM recording_members")
     }
@@ -147,14 +164,31 @@ def load_library(db: Database, descriptors: dict[str, Descriptors] | None = None
         rids,
         {r: i for i, r in enumerate(rids)},
         vectors,
-        m / norms,
+        m,
         tags,
+        label_cols,
+        classes,
         years,
         evidence,
         titles,
         rec_of_uri,
         idf,
     )
+
+
+def playlist_matrix(lib: Library, rules: dict[str, Any]) -> np.ndarray:
+    """Song vectors as this playlist sees them: vibe words, plus only the genre / era labels
+    its definition asks for. Rows L2-normalised."""
+    wanted = vibes.requested_labels(rules, lib.classes)
+    mask = ~lib.label_cols.copy()
+    if wanted:
+        for i, t in enumerate(lib.tags):
+            if t in wanted:
+                mask[i] = True
+    m = lib.raw * mask
+    norms = np.linalg.norm(m, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return m / norms
 
 
 def tag_specificity(vectors: dict[str, dict[str, float]]) -> dict[str, float]:
@@ -229,14 +263,16 @@ def score_playlist(
 
     eff = {t: w * lib.idf.get(t, 1.0) for t, w in weights.items()}
     wsum = sum(eff.values())
-    ref_rows = [lib.index[r] for r in refs if r in lib.index and lib.vectors[r]]
-    ref_matrix = lib.matrix[ref_rows] if ref_rows else None
+    mat = playlist_matrix(lib, rules)
+    has_data = np.linalg.norm(mat, axis=1) > 0
+    ref_rows = [lib.index[r] for r in refs if r in lib.index and has_data[lib.index[r]]]
+    ref_matrix = mat[ref_rows] if ref_rows else None
     ref_ids = [lib.rids[i] for i in ref_rows]
-    sims_all = lib.matrix @ ref_matrix.T if ref_matrix is not None else None
+    sims_all = mat @ ref_matrix.T if ref_matrix is not None else None
     # Songs you rejected act as negative examples for this playlist only
-    rej_rows = [lib.index[r] for r in excluded if r in lib.index and lib.vectors[r]]
+    rej_rows = [lib.index[r] for r in excluded if r in lib.index and has_data[lib.index[r]]]
     rej_ids = [lib.rids[i] for i in rej_rows]
-    rej_sims = lib.matrix @ lib.matrix[rej_rows].T if rej_rows else None
+    rej_sims = mat @ mat[rej_rows].T if rej_rows else None
 
     def raw(rid: str) -> SongScore:
         vec = lib.vectors[rid]
@@ -308,7 +344,7 @@ def score_playlist(
         elif years and y:
             reasons.append(f"{y} fits {years[0]}–{years[1]}")
         if lib.evidence[rid] == "artist":
-            reasons.append("only artist-level tags known")
+            reasons.append("no data on the song itself: judged by its artist's tags")
         return SongScore(
             rid,
             "out",
@@ -320,6 +356,7 @@ def score_playlist(
         )
 
     scores = {rid: raw(rid) for rid in lib.rids}
+    draft.scores, draft.excluded = scores, set(excluded)
 
     ref_scores = [scores[r].score for r in refs if r in scores and scores[r].score > 0]
     if len(ref_scores) >= 3:
@@ -377,7 +414,55 @@ def score_playlist(
 # ---------------------------------------------------------------------------
 
 
-def build_drafts(db: Database, *, descriptors: dict[str, Descriptors] | None = None) -> DraftResult:
+COVERAGE_KEY = "draft_coverage"
+
+
+def coverage_enabled(db: Database) -> bool:
+    return (db.get_meta(COVERAGE_KEY) or "on") == "on"
+
+
+def set_coverage(db: Database, on: bool) -> None:
+    db.set_meta(COVERAGE_KEY, "on" if on else "off")
+
+
+def place_leftovers(
+    lib: Library, drafts: list[PlaylistDraft], previous: dict[int, set[str]]
+) -> None:
+    """Put every song that cleared no bar into the playlist it comes closest to."""
+    assigned = {s.recording_id for d in drafts for s in d.include}
+    auto = [d for d in drafts if d.identity.auto_maintain and d.threshold]
+    for rid in lib.rids:
+        if rid in assigned:
+            continue
+        best: tuple[float, PlaylistDraft, SongScore] | None = None
+        for d in auto:
+            s = d.scores.get(rid)
+            if s is None or s.score <= 0 or rid in d.excluded:
+                continue
+            ratio = s.score / (d.threshold or 1.0)
+            if rid in previous.get(d.identity.identity_id, set()):
+                ratio *= STICKY
+            if best is None or ratio > best[0]:
+                best = (ratio, d, s)
+        if best is None:
+            continue
+        _ratio, d, s = best
+        if s in d.review:
+            d.review.remove(s)
+        s.decision = "include"
+        s.reasons = [WEAK_FIT, *s.reasons]
+        d.include.append(s)
+        d.weak += 1
+    for d in auto:
+        d.include.sort(key=lambda x: -x.score)
+
+
+def build_drafts(
+    db: Database,
+    *,
+    descriptors: dict[str, Descriptors] | None = None,
+    coverage: bool | None = None,  # None = your saved setting (on unless you turned it off)
+) -> DraftResult:
     lib = load_library(db, descriptors)
     prev_run = latest_run(db)
     previous: dict[int, set[str]] = defaultdict(set)
@@ -392,6 +477,8 @@ def build_drafts(db: Database, *, descriptors: dict[str, Descriptors] | None = N
         score_playlist(db, ident, lib, previous=previous.get(ident.identity_id))
         for ident in list_identities(db)
     ]
+    if coverage if coverage is not None else coverage_enabled(db):
+        place_leftovers(lib, drafts, previous)
     changes = {}
     if prev_run is not None:
         for d in drafts:
@@ -431,6 +518,7 @@ def build_drafts(db: Database, *, descriptors: dict[str, Descriptors] | None = N
             d.identity.name: {
                 "include": len(d.include),
                 "review": len(d.review),
+                "weak": d.weak,
                 "threshold": d.threshold,
             }
             for d in drafts
