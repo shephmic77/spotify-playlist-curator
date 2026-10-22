@@ -284,8 +284,8 @@ def cmd_tags(settings: Settings, args: argparse.Namespace) -> int:
         by_class.setdefault(classes.of(t), []).append((t, n))
     print(
         "Tags on your songs themselves, by how they're read. vibe = always counts; genre / era "
-        "= only in playlists that ask for them; other = counts as half a vibe word; ignore = "
-        "never.\n"
+        "= only in playlists that ask for them; other = unrecognized, ignored until you "
+        "promote it; ignore = never.\n"
     )
     for cls in [args.cls] if args.cls else ["vibe", "other", "genre", "era", "ignore"]:
         items = by_class.get(cls, [])

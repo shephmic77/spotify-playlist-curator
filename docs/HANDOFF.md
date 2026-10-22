@@ -29,7 +29,7 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 232 tests
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 233 tests
 pass, `ruff` clean. Version 1.0.0, tagged `v1.0.0`.
 
 ---
@@ -123,7 +123,7 @@ spotify-playlist-curator/
 │   ├── cli_sync.py           sync / rollback / local-files
 │   ├── cli_maintain.py       maintain / status / settings / schedule
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    232 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    233 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -240,7 +240,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 232 tests, no network
+pytest                       # 233 tests, no network
 ruff check . && ruff format --check .
 ```
 

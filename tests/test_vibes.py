@@ -211,3 +211,15 @@ def test_descriptions_read_every_word_you_type():
     assert vibes.words_in("late night drive") == {"late night": 0.9, "driving": 0.9}
     assert vibes.labels_in("no rap please") == {"rap": 0.9}  # negation handled by describe
     assert "rap" not in ds.translate("chill, no rap", engine="offline").tags
+
+
+def test_junk_tags_are_ignored():
+    junk = {"wsum 91.7 fm madison": 0.5, "cityscape with dj bean": 0.5, "glorptastic": 1.0}
+    for t in junk:
+        assert C.of(t) in ("ignore", "other")
+    assert C.of("wsum 91.7 fm madison") == C.of("cityscape with dj bean") == "ignore"
+    p = vibes.profile({"lastfm_track": junk, "acousticbrainz": {"relaxed": 0.6}}, C)
+    assert p.vibe == {"relaxed": 0.6} and p.evidence == "song"
+    # junk-only song tags don't count as "song data": falls back to the artist, flagged
+    p = vibes.profile({"lastfm_track": junk, "lastfm_artist": {"chill": 1.0}}, C)
+    assert p.evidence == "artist"

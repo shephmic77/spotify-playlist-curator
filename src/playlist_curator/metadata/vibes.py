@@ -33,7 +33,9 @@ CLASSES = ("vibe", "genre", "era", "ignore")
 
 # Weights
 SOUND_GENRE_WEIGHT = 0.6  # a genre's implied vibe counts less than a direct vibe word
-OTHER_WEIGHT = 0.5  # unclassified tags count as half a vibe word
+# Unrecognized tags are ignored: on less-played songs they're mostly radio stations, playlist
+# names and in-jokes ("wsum 91.7 fm madison"). Promote real ones with `curator tags set`.
+OTHER_WEIGHT = 0.0
 ARTIST_FALLBACK = 0.5  # only for songs with no song-level data at all
 
 # Vibe words, with spelling variants folded together
@@ -779,7 +781,11 @@ IGNORE_EXACT = {
     "rapper",
     "singer",
 }
-IGNORE_PATTERN = re.compile(r"^\d{4}$|^\d{4}s?$|\b(records|recordings|label)\b")
+IGNORE_PATTERN = re.compile(
+    r"^\d{4}$|^\d{4}s?$|\b(records|recordings|label)\b"
+    r"|\b\d{2,3}(\.\d)?\s*fm\b|\bfm\b|\bradio\b|\bstation\b|\bdj\b|\bplaylist\b"
+    r"|\bwith\b|\bpodcast\b|\bmixtape\b|\bshow\b|\bepisode\b|\bvol\b"
+)
 
 
 def default_class(tag: str) -> str:
