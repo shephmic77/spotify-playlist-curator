@@ -102,3 +102,16 @@ def test_review_feedback_decisions_stats(env, capsys, monkeypatch):
     out = capsys.readouterr().out
     assert "accept%" in out and "holdout" in out and "Chill" in out
     assert cli.main(["review", "Nobody"]) == 1
+
+
+def test_tags_commands(env, capsys):
+    assert cli.main(["tags"]) == 0
+    out = capsys.readouterr().out
+    assert "vibe (" in out and "genre (" in out
+    assert cli.main(["tags", "songs", "--limit", "3"]) == 0
+    out = capsys.readouterr().out
+    assert "judged by their own data" in out and "Showing 3" in out
+    assert cli.main(["tags", "song", "Chill Song 1"]) == 0
+    assert "sounds:" in capsys.readouterr().out
+    assert cli.main(["tags", "set", "indie", "vibe"]) == 0
+    assert "now read as: vibe" in capsys.readouterr().out

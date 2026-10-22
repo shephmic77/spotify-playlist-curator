@@ -439,7 +439,10 @@ class LastfmProvider(_HTTPProvider):
             return None
         outcome = ProviderOutcome(found=False)
         if res and res[0] == "ok" and res[1] and res[1]["tags"]:
-            outcome.tags["lastfm_track"] = weights_from_counts(res[1]["tags"], artist=q.artist)
+            # the song's own tags: keep up to 40 and weaker ones too, for a fuller picture
+            outcome.tags["lastfm_track"] = weights_from_counts(
+                res[1]["tags"], artist=q.artist, top=40, min_weight=0.05
+            )
         if ares and ares[0] == "ok" and ares[1] and ares[1]["tags"]:
             outcome.tags["lastfm_artist"] = weights_from_counts(ares[1]["tags"], artist=q.artist)
         outcome.tags = {k: v for k, v in outcome.tags.items() if v}
@@ -464,18 +467,81 @@ AB_CLASSIFIERS: dict[str, tuple[str, str]] = {
     "mood_electronic": ("electronic", "synth"),
     "voice_instrumental": ("instrumental", "instrumental"),
 }
+# multi-class classifiers: class -> vibe word (read when that class is the confident winner)
+AB_MULTI: dict[str, dict[str, str]] = {
+    "timbre": {"bright": "bright", "dark": "dark"},
+    # only meaningful when the song has vocals (checked against voice_instrumental)
+    "gender": {"female": "female vocals", "male": "male vocals"},
+    # MIREX mood clusters (passionate/rousing, cheerful/fun, poignant/bittersweet,
+    # humorous/whimsical, aggressive/fiery)
+    "moods_mirex": {
+        "Cluster1": "passionate",
+        "Cluster2": "cheerful",
+        "Cluster3": "bittersweet",
+        "Cluster4": "playful",
+        "Cluster5": "intense",
+    },
+}
+AB_MULTI_MIN = {"timbre": 0.7, "gender": 0.75, "moods_mirex": 0.45}
+# low-level measurements (not classifiers): tempo, key, how busy and how dynamic
+AB_LOWLEVEL = (
+    "rhythm.bpm",
+    "tonal.key_scale",
+    "tonal.key_strength",
+    "rhythm.onset_rate",
+    "lowlevel.dynamic_complexity",
+)
+AB_MEASURE_WEIGHT = 0.5  # measurements are reliable-ish but say less about the feel
 AB_WEIGHT = 0.7  # audio classifiers are useful but noisy: they count less than song tags
 AB_MIN_PROBABILITY = 0.6  # below this the classifier isn't saying much either way
 AB_BULK = 25  # documented maximum recording ids per request
 
 
-def ab_vibes(features: dict[str, float]) -> dict[str, float]:
-    """Classifier probabilities -> vibe weights. Only confident readings count."""
-    out = {}
+def ab_vibes(features: dict[str, Any]) -> dict[str, float]:
+    """AcousticBrainz readings -> vibe weights. Only confident readings count; every rule is a
+    fixed threshold on a published measure, nothing is learned."""
+    out: dict[str, float] = {}
+
+    def put(word: str, w: float) -> None:
+        if w > 0:
+            out[word] = max(out.get(word, 0.0), round(w, 4))
+
     for _clf, (cls, word) in AB_CLASSIFIERS.items():
         p = features.get(cls)
-        if p is not None and p >= AB_MIN_PROBABILITY:
-            out[word] = round(AB_WEIGHT * (p - 0.5) / 0.5, 4)
+        if isinstance(p, int | float) and p >= AB_MIN_PROBABILITY:
+            put(word, AB_WEIGHT * (p - 0.5) / 0.5)
+    for clf, words in AB_MULTI.items():
+        probs = features.get(clf)
+        if not isinstance(probs, dict) or not probs:
+            continue
+        if clf == "gender" and (features.get("instrumental") or 0) > 0.5:
+            continue  # no vocals to speak of
+        cls, p = max(probs.items(), key=lambda kv: kv[1])
+        if cls in words and p >= AB_MULTI_MIN[clf]:
+            put(words[cls], AB_WEIGHT * p)
+    bpm = features.get("bpm")
+    if isinstance(bpm, int | float) and bpm > 0:
+        # detected tempo; half/double-time mistakes happen, hence the low weight
+        if bpm < 85:
+            put("slow", AB_MEASURE_WEIGHT)
+        elif bpm <= 115:
+            put("mid-tempo", AB_MEASURE_WEIGHT)
+        elif bpm >= 135:
+            put("fast", AB_MEASURE_WEIGHT)
+        else:
+            put("upbeat", AB_MEASURE_WEIGHT * 0.6)
+    scale, strength = features.get("key_scale"), features.get("key_strength") or 0
+    if scale in ("major", "minor") and strength >= 0.6:
+        put(f"{scale} key", AB_MEASURE_WEIGHT)
+    onset = features.get("onset_rate")
+    if isinstance(onset, int | float):
+        if onset >= 5.5:
+            put("busy", AB_MEASURE_WEIGHT * 0.8)
+        elif onset <= 2.0:
+            put("minimal", AB_MEASURE_WEIGHT * 0.8)
+    dyn = features.get("dynamic_complexity")
+    if isinstance(dyn, int | float) and dyn >= 6:
+        put("dynamic", AB_MEASURE_WEIGHT * 0.8)
     return out
 
 
@@ -518,15 +584,52 @@ class AcousticBrainzProvider(_HTTPProvider):
             docs = body.get(mbid) or {}
             doc = docs.get("0") or (next(iter(docs.values())) if docs else None)
             hl = (doc or {}).get("highlevel") or {}
-            feats = {}
+            feats: dict[str, Any] = {}
             for clf, (cls, _word) in AB_CLASSIFIERS.items():
                 p = ((hl.get(clf) or {}).get("all") or {}).get(cls)
                 if isinstance(p, int | float):
                     feats[cls] = round(float(p), 4)
+            for clf in AB_MULTI:
+                probs = (hl.get(clf) or {}).get("all") or {}
+                probs = {
+                    k: round(float(v), 4) for k, v in probs.items() if isinstance(v, int | float)
+                }
+                if probs:
+                    feats[clf] = probs
             if feats:
                 self.cache.put(f"mbid:{mbid}", "ok", {"features": feats}, self.ttl)
             else:
                 self.cache.put(f"mbid:{mbid}", "not_found", None, self.not_found_ttl)
+        self._respect_rate_headers(resp)
+
+    def _fetch_lowlevel(self, mbids: list[str]) -> None:
+        resp = self._get(
+            f"{AB_BASE}/low-level",
+            {"recording_ids": ";".join(mbids), "features": ";".join(AB_LOWLEVEL)},
+        )
+        if resp.status_code != 200:
+            raise ProviderError(f"acousticbrainz low-level: HTTP {resp.status_code}")
+        body = resp.json()
+        for mbid in mbids:
+            docs = body.get(mbid) or {}
+            doc = docs.get("0") or (next(iter(docs.values())) if docs else None) or {}
+            rhythm, tonal, low = (doc.get(k) or {} for k in ("rhythm", "tonal", "lowlevel"))
+            meas = {
+                "bpm": rhythm.get("bpm"),
+                "onset_rate": rhythm.get("onset_rate"),
+                "key_scale": tonal.get("key_scale"),
+                "key_key": tonal.get("key_key"),
+                "key_strength": tonal.get("key_strength"),
+                "dynamic_complexity": low.get("dynamic_complexity"),
+            }
+            meas = {k: v for k, v in meas.items() if v is not None}
+            if meas:
+                self.cache.put(f"ll:{mbid}", "ok", meas, self.ttl)
+            else:
+                self.cache.put(f"ll:{mbid}", "not_found", None, self.not_found_ttl)
+        self._respect_rate_headers(resp)
+
+    def _respect_rate_headers(self, resp: httpx.Response) -> None:
         remaining = resp.headers.get("X-RateLimit-Remaining")
         reset = resp.headers.get("X-RateLimit-Reset-In")
         if remaining == "0" and reset and reset.isdigit():
@@ -534,38 +637,50 @@ class AcousticBrainzProvider(_HTTPProvider):
 
     def prefetch(self, queries: list[RecordingQuery], progress: Callable[[str], None]) -> None:
         """Fetch everything not cached yet, 25 recordings per request."""
-        todo = []
+        hl_todo, ll_todo = [], []
         for q in queries:
             for m in self._mbids(q):
                 if self.cache.get(f"mbid:{m}") is None:
-                    todo.append(m)
-        todo = list(dict.fromkeys(todo))
-        if todo:
-            progress(f"acousticbrainz: {len(todo)} recordings to fetch")
-        for i in range(0, len(todo), AB_BULK):
-            self._fetch_bulk(todo[i : i + AB_BULK])
+                    hl_todo.append(m)
+                if self.cache.get(f"ll:{m}") is None:
+                    ll_todo.append(m)
+        hl_todo, ll_todo = list(dict.fromkeys(hl_todo)), list(dict.fromkeys(ll_todo))
+        if hl_todo or ll_todo:
+            progress(f"acousticbrainz: {max(len(hl_todo), len(ll_todo))} recordings to fetch")
+        for i in range(0, len(hl_todo), AB_BULK):
+            self._fetch_bulk(hl_todo[i : i + AB_BULK])
+        for i in range(0, len(ll_todo), AB_BULK):
+            self._fetch_lowlevel(ll_todo[i : i + AB_BULK])
 
     def lookup(self, q: RecordingQuery, *, offline: bool = False) -> ProviderOutcome | None:
         mbids = self._mbids(q)
         if not mbids:
             return ProviderOutcome(found=False)
         before = self.requests
-        found = []
+        found: list[dict[str, Any]] = []
         for m in mbids:
-            cached = self.cache.get(f"mbid:{m}", allow_expired=offline)
-            if cached is None and not offline:
-                self._fetch_bulk([m])
-                cached = self.cache.get(f"mbid:{m}")
-            if cached and cached[0] == "ok" and cached[1]:
-                found.append(cached[1]["features"])
+            feats: dict[str, Any] = {}
+            for prefix, fetch in (("mbid", self._fetch_bulk), ("ll", self._fetch_lowlevel)):
+                cached = self.cache.get(f"{prefix}:{m}", allow_expired=offline)
+                if cached is None and not offline:
+                    fetch([m])
+                    cached = self.cache.get(f"{prefix}:{m}")
+                if cached and cached[0] == "ok" and cached[1]:
+                    feats.update(cached[1]["features"] if prefix == "mbid" else cached[1])
+            if feats:
+                found.append(feats)
         if not found:
             return ProviderOutcome(found=False, from_cache=self.requests == before)
-        # several MusicBrainz recordings of the same song: average what AcousticBrainz says
-        keys = {k for f in found for k in f}
-        avg = {k: sum(f.get(k, 0.0) for f in found) / sum(1 for f in found if k in f) for k in keys}
+        # several MusicBrainz recordings of the same song: use the first one AcousticBrainz has
+        # (averaging tempos or keys across different recordings would invent values)
+        feats = found[0]
         outcome = ProviderOutcome(found=True, from_cache=self.requests == before)
-        tags = ab_vibes(avg)
+        tags = ab_vibes(feats)
         if tags:
             outcome.tags["acousticbrainz"] = tags
-        outcome.facts["ab_features"] = {k: round(v, 3) for k, v in avg.items()}
+        outcome.facts["ab_features"] = {
+            k: (round(v, 3) if isinstance(v, float) else v)
+            for k, v in feats.items()
+            if not isinstance(v, dict)
+        }
         return outcome

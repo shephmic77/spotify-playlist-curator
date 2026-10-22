@@ -237,7 +237,7 @@ LEXICON: dict[tuple[str, ...], dict[str, Any]] = {
         },
         "avoid": [],
     },
-    ("acoustic", "unplugged", "guitar"): {
+    ("acoustic", "unplugged"): {
         "tags": {
             "acoustic": 1.0,
             "singer songwriter": 0.7,
@@ -466,7 +466,21 @@ def translate(
     cls = classes or vibes.TagClasses()
     recipe.tags = vibes.vibe_only(recipe.tags, text, cls)
     recipe.avoid = vibes.vibe_only_avoid(recipe.avoid, text, cls)
+    # every vibe, genre or era word you typed counts, even outside the built-in situations
+    negated = " ".join(m.group(1) for m in _NEGATION.finditer(text.lower()))
+    unwanted = set(vibes.words_in(negated)) | set(vibes.labels_in(negated))
+    wanted = {**vibes.labels_in(text), **vibes.words_in(text)}
+    for word, w in wanted.items():
+        if word in unwanted:
+            continue
+        recipe.tags[word] = max(recipe.tags.get(word, 0.0), w)
+        for adj, f in vibes.SOUND_OF.get(word, {}).items():  # "funk" also means funky
+            recipe.tags.setdefault(adj, round(vibes.SOUND_GENRE_WEIGHT * f * w, 2))
+    # never avoid something you asked for ("drums and bass" vs a preset avoiding dubstep)
+    recipe.avoid = [a for a in recipe.avoid if a not in wanted or a in unwanted]
     recipe.tags = {t: w for t, w in recipe.tags.items() if t not in recipe.avoid}
+    if recipe.tags and recipe.note.startswith("None of the built-in situations matched"):
+        recipe.note = ""
     return recipe
 
 

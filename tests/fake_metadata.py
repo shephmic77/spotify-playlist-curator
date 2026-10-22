@@ -101,6 +101,19 @@ AB_HIGHLEVEL: dict[str, dict[str, Any]] = {
     "mb-rec-tom": _hl(danceable=0.8, happy=0.85),
     # mb-rec-africa: not in AcousticBrainz
 }
+AB_HIGHLEVEL["mb-rec-midnight"]["highlevel"]["moods_mirex"] = {
+    "all": {"Cluster1": 0.6, "Cluster2": 0.1, "Cluster3": 0.1, "Cluster4": 0.1, "Cluster5": 0.1}
+}
+AB_HIGHLEVEL["mb-rec-midnight"]["highlevel"]["gender"] = {"all": {"female": 0.1, "male": 0.9}}
+AB_HIGHLEVEL["mb-rec-midnight"]["highlevel"]["timbre"] = {"all": {"bright": 0.55, "dark": 0.45}}
+AB_LOWLEVEL: dict[str, dict[str, Any]] = {
+    "mb-rec-midnight": {
+        "rhythm": {"bpm": 105.2, "onset_rate": 4.1},
+        "tonal": {"key_key": "E", "key_scale": "major", "key_strength": 0.71},
+        "lowlevel": {"dynamic_complexity": 3.2},
+    },
+    "mb-rec-tom": {"rhythm": {"bpm": 168.9}, "tonal": {"key_scale": "minor", "key_strength": 0.4}},
+}
 
 
 class FakeMetadataAPIs:
@@ -148,10 +161,14 @@ class FakeMetadataAPIs:
                 )
             return httpx.Response(404, json={"error": "Not Found"})
         if url.netloc == "acousticbrainz.org":
-            assert url.path == "/api/v1/high-level"
             ids = q.get("recording_ids", "").split(";")
             assert 0 < len(ids) <= 25
-            body = {m: {"0": AB_HIGHLEVEL[m]} for m in ids if m in AB_HIGHLEVEL}
+            if url.path == "/api/v1/low-level":
+                self.raw_queries.append(url.query)
+                body = {m: {"0": AB_LOWLEVEL[m]} for m in ids if m in AB_LOWLEVEL}
+            else:
+                assert url.path == "/api/v1/high-level"
+                body = {m: {"0": AB_HIGHLEVEL[m]} for m in ids if m in AB_HIGHLEVEL}
             return httpx.Response(
                 200,
                 json=body,

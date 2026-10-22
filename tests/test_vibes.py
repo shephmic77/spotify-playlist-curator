@@ -25,7 +25,22 @@ def test_tag_classes():
     assert C.of("british") == C.of("2011") == C.of("live") == "ignore"
     assert C.of("jazz hop") == "genre" and vibes.SOUND_OF["jazz hop"]["jazzy"] == 1.0
     assert C.of("yacht rock") == "genre"  # pattern
-    assert vibes.default_class("sparkly") == "other"
+    assert vibes.default_class("glorptastic") == "other"
+    assert C.of("sparkly") == "vibe" and vibes.VIBE_ALIASES["sparkly"] == "bright"
+    # a much bigger vocabulary describes the song itself
+    for word, canon in [
+        ("falsetto", "falsetto"),
+        ("harmonies", "harmonies"),
+        ("fuzzy", "fuzzy"),
+        ("808s", "bass"),
+        ("guitar riffs", "riffs"),
+        ("golden hour", "sunset"),
+        ("wistful", "bittersweet"),
+        ("bouncy", "bouncy"),
+        ("storytelling", "storytelling"),
+    ]:
+        assert C.of(word) == "vibe" and vibes.VIBE_ALIASES[word] == canon
+    assert vibes.SOUND_OF["boom bap"]["drums"] > 0 and vibes.SOUND_OF["yacht rock"]["smooth"]
 
 
 def test_a_song_is_judged_by_its_own_sound_not_its_artist():
@@ -176,3 +191,23 @@ def test_every_song_gets_a_home_except_songs_with_no_data(db, lib):
 def test_descriptors_of_a_song_without_song_data():
     d = Descriptors("r", by_source={"mb_artist": {"chill": 1.0}})
     assert vibes.profile(d.by_source, C).evidence == "artist"
+
+
+def test_descriptions_read_every_word_you_type():
+    rap = ds.translate("rap, hip hop", engine="offline")
+    assert {"rap", "hip hop"} <= set(rap.tags)
+    alt = ds.translate("90s and 2000s rock, alternative rock, grunge", engine="offline")
+    assert {"90s", "00s", "alternative rock", "grunge"} <= set(alt.tags)
+    riffs = ds.translate("guitar, drums and bass stand out, energetic", engine="offline")
+    assert {"guitar", "drums", "bass"} <= set(riffs.tags)
+    assert "acoustic" not in riffs.tags and "bass" not in riffs.avoid
+    groove = ds.translate("soul, funk and jazz, groovy", engine="offline")
+    assert {"soul", "funk", "jazz", "funky", "jazzy", "soulful"} <= set(groove.tags)
+    study = ds.translate("study, lyrics ok but not distracting, not loud", engine="offline")
+    assert "lyrical" not in study.tags and "loud" in study.avoid
+    assert "video game music" not in study.tags  # "music" alone isn't asking for it
+    free = ds.translate("bouncy falsetto, windows down", engine="offline")
+    assert {"bouncy", "falsetto", "driving"} <= set(free.tags)
+    assert vibes.words_in("late night drive") == {"late night": 0.9, "driving": 0.9}
+    assert vibes.labels_in("no rap please") == {"rap": 0.9}  # negation handled by describe
+    assert "rap" not in ds.translate("chill, no rap", engine="offline").tags

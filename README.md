@@ -62,9 +62,16 @@ All phases are complete. How each was built: [docs/project_plan.md](docs/project
   near-matches (e.g. a remaster with a new ISRC) and local files that look like catalog songs are
   *suggested* for you to confirm. Live, remix, edit, acoustic, sped-up and similar versions are
   never treated as duplicates. Your decisions are kept permanently and override the ISRC rule.
-- **Tags and audio data** (`curator enrich`): Last.fm and MusicBrainz tags, plus AcousticBrainz
-  audio measures (danceable, relaxed, happy, sad, aggressive, acoustic, electronic,
-  instrumental), fetched within each service's rate limits and cached.
+- **Tags and audio data** (`curator enrich`): up to 40 Last.fm tags per song and MusicBrainz
+  tags, plus AcousticBrainz audio data: classifiers (danceable, relaxed, happy, sad, aggressive,
+  party, acoustic, electronic, instrumental, bright/dark timbre, female/male vocals, five mood
+  clusters such as passionate or bittersweet) and measurements (tempo, major/minor key, how busy
+  and how dynamic). Fetched within each service's rate limits and cached.
+- **A rich vocabulary of about 430 sound words** (feelings, energy, rhythm, texture,
+  production, instruments, voice, moments: falsetto, harmonies, fuzzy, jangly, 808s, riffs,
+  bouncy, bittersweet, golden hour, windows down...), plus 160 genres that imply a sound
+  ("boom bap" → drums and samples, "yacht rock" → smooth and breezy). `curator tags songs`
+  lists every song with its descriptors.
 - **Every song judged as an individual, by how it sounds** (`metadata/vibes.py`): only tags on
   the song itself and its audio measures count, as vibe words (chill, funky, mellow, upbeat,
   dreamy, instrumental...). Artist-level tags aren't used (except as a flagged last resort for
@@ -234,6 +241,7 @@ curator maintain settings --auto-apply on [--max-changes 10 --max-share 0.25 --m
 curator maintain schedule --install [--every weekly] [--at 09:00]   # or --remove
 curator tags [--class vibe]  # how tags are read: vibe / genre / era / ignore
 curator tags song "Title"   # how one song is judged (its own sound, labels, audio data)
+curator tags songs [--playlist "Name"]   # every song with its descriptors
 curator tags set "tag" vibe|genre|era|ignore|default
 curator draft --coverage on|off   # every song in at least one playlist (default on)
 curator start-over          # backup, remove the app's playlists from Spotify, wipe definitions
@@ -252,7 +260,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 230 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
+pytest            # 232 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
 ruff check . && ruff format --check .
 ```
 

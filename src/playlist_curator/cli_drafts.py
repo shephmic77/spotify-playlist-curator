@@ -309,6 +309,58 @@ def cmd_tags_set(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_tags_songs(settings: Settings, args: argparse.Namespace) -> int:
+    """Every song with its own descriptors, so you can see how the library reads."""
+    import json as _json
+
+    db = _db(settings)
+    if db is None:
+        return 1
+    with db:
+        desc = load_descriptors(db)
+        classes = load_classes(db)
+        rows = db.conn.execute(
+            "SELECT recording_id, title, artists_json FROM recordings ORDER BY title"
+        ).fetchall()
+        only: set[str] | None = None
+        if args.playlist:
+            run = sc.latest_run(db)
+            ident = idn.get_identity(db, args.playlist)
+            only = {
+                r[0]
+                for r in db.conn.execute(
+                    "SELECT recording_id FROM draft_members WHERE run_id=? AND identity_id=? "
+                    "AND decision='include'",
+                    (run, ident.identity_id),
+                )
+            }
+    shown = counts = 0
+    by_evidence: dict[str, int] = {}
+    for r in rows:
+        if only is not None and r["recording_id"] not in only:
+            continue
+        d = desc.get(r["recording_id"])
+        prof = vibes.profile(d.by_source if d else {}, classes)
+        by_evidence[prof.evidence] = by_evidence.get(prof.evidence, 0) + 1
+        counts += len(prof.vibe)
+        if shown >= args.limit:
+            continue
+        shown += 1
+        top = [t for t, _ in sorted(prof.vibe.items(), key=lambda kv: -kv[1])[: args.words]]
+        flag = {"artist": "  (artist only)", "none": "  (no data)"}.get(prof.evidence, "")
+        artists = ", ".join(_json.loads(r["artists_json"]))
+        print(f"{r['title'][:34]:<34} {artists[:20]:<20} {', '.join(top) or '-'}{flag}")
+    n = sum(by_evidence.values())
+    print(
+        f"\n{n} songs: {by_evidence.get('song', 0)} judged by their own data, "
+        f"{by_evidence.get('artist', 0)} by artist only, {by_evidence.get('none', 0)} with no data."
+        f" Average {counts / max(n, 1):.1f} descriptors per song."
+    )
+    if shown < n:
+        print(f"Showing {shown}; more with --limit {n}")
+    return 0
+
+
 def cmd_tags_song(settings: Settings, args: argparse.Namespace) -> int:
     db = _db(settings)
     if db is None:
@@ -380,6 +432,11 @@ def register(sub: Any) -> None:
     q.add_argument("tag")
     q.add_argument("cls", choices=[*vibes.CLASSES, "default"])
     q.set_defaults(func=cmd_tags_set)
+    q = ts.add_parser("songs", help="every song with its own descriptors")
+    q.add_argument("--playlist", help="only songs in this playlist's latest draft")
+    q.add_argument("--limit", type=int, default=60)
+    q.add_argument("--words", type=int, default=8, help="descriptors per song")
+    q.set_defaults(func=cmd_tags_songs)
     q = ts.add_parser("song", help="how one song is judged (its own vibe, labels, source)")
     q.add_argument("title")
     q.set_defaults(func=cmd_tags_song)

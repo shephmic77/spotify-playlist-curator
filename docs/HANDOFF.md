@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.1.0)
+# Handoff: Spotify Playlist Curator (v1.2.0)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then the docs it links.
@@ -29,7 +29,7 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 230 tests
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 232 tests
 pass, `ruff` clean. Version 1.0.0, tagged `v1.0.0`.
 
 ---
@@ -123,7 +123,7 @@ spotify-playlist-curator/
 │   ├── cli_sync.py           sync / rollback / local-files
 │   ├── cli_maintain.py       maintain / status / settings / schedule
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    230 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    232 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -240,7 +240,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 230 tests, no network
+pytest                       # 232 tests, no network
 ruff check . && ruff format --check .
 ```
 
@@ -303,7 +303,7 @@ playlists.
 2. **Instrument playlists** (Guitar, Drums & Bass) have little to match on: tags rarely name
    instruments and AcousticBrainz has no instrument classifier. They depend on example songs.
 3. ~~Broad / redundant playlists, proposal #24~~: obsolete after the start-over.
-4. Tag classes are rules (`vibes.py`); check `curator tags` after enrich and reclassify any
+4. Tag classes are rules (`vibes.py`, ~430 vibe words, ~160 sound genres; v1.2); check `curator tags` / `curator tags songs` after enrich and reclassify any
    that are read wrongly (`curator tags set TAG vibe|genre|era|ignore`).
 5. **MusicBrainz backfill**: `curator enrich --source musicbrainz` (~1 h at 1 req/s, resumable).
    Follow with `curator maintain --preview`: tags shift scores and cause a jump.

@@ -370,7 +370,8 @@ def test_acousticbrainz_reads_audio_measures_in_bulk(fake, client, db, apis):
     imported(client, db)
     (_mbs, abs_) = enrich(db, [mb(db, apis), ab(db, apis)])
     bulk = [c for c in apis.calls if c.startswith("acousticbrainz.org")]
-    assert len(bulk) == 1  # Midnight City, Take On Me, Africa: one request
+    assert len(bulk) == 2  # one high-level + one low-level request for all three songs
+    assert any("features=rhythm.bpm" in q for q in apis.raw_queries)
     assert abs_.found == 2  # Africa isn't in AcousticBrainz
     desc = load_descriptors(db)
     d = desc["isrc:FRZID1100001"]
@@ -378,6 +379,14 @@ def test_acousticbrainz_reads_audio_measures_in_bulk(fake, client, db, apis):
     assert "synth" in d.by_source["acousticbrainz"]  # mood_electronic
     assert "relaxed" not in d.by_source["acousticbrainz"]  # 0.3: not confident, left out
     assert d.facts["ab_features"]["danceable"] == 0.9
+    ab_tags = d.by_source["acousticbrainz"]
+    assert "mid-tempo" in ab_tags and "major key" in ab_tags  # 105 bpm, E major
+    assert "passionate" in ab_tags  # MIREX cluster 1
+    assert "male vocals" in ab_tags
+    assert "bright" not in ab_tags  # timbre 0.55: not confident
+    assert d.facts["ab_features"]["bpm"] == 105.2
+    tom = desc["isrc:GBAYE8500001"].by_source["acousticbrainz"]
+    assert "fast" in tom and "minor key" not in tom  # key strength 0.4: not trusted
     # cached: a second run sends nothing
     n = len(apis.calls)
     enrich(db, [ab(db, apis)])
@@ -393,3 +402,7 @@ def test_ab_vibes_only_counts_confident_readings():
     from playlist_curator.metadata.providers import ab_vibes
 
     assert ab_vibes({"danceable": 0.55, "sad": 1.0}) == {"sad": 0.7}
+    # no vocals -> no vocal gender, even if the classifier leans one way
+    assert "female vocals" not in ab_vibes({"instrumental": 0.9, "gender": {"female": 0.9}})
+    assert ab_vibes({"bpm": 70})["slow"] and ab_vibes({"onset_rate": 6.2})["busy"]
+    assert ab_vibes({"dynamic_complexity": 7.5})["dynamic"]
