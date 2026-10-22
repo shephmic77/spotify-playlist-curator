@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.2.0)
+# Handoff: Spotify Playlist Curator (v1.2.1)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then the docs it links.
@@ -30,7 +30,7 @@ already has, and keeps it organized:
 9. **Maintains** them automatically on a schedule, within drift limits.
 
 Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 233 tests
-pass, `ruff` clean. Version 1.0.0, tagged `v1.0.0`.
+pass, `ruff` clean. Version 1.2.1 (last tag `v1.0.0`).
 
 ---
 
@@ -90,7 +90,7 @@ spotify-playlist-curator/
 │   ├── data_sources.md       why MusicBrainz + Last.fm, rate limits, tag weighting
 │   └── scoring_methodology.md  how songs are scored into playlists
 ├── src/playlist_curator/
-│   ├── __init__.py           __version__ = "1.0.0"
+│   ├── __init__.py           __version__
 │   ├── config.py             Settings from env; READ_SCOPES / WRITE_SCOPES
 │   ├── models.py             pydantic models + parsers for Spotify JSON
 │   ├── spotify/
@@ -285,6 +285,16 @@ Workout, Soul / Funk / Jazz, Rap, Heavier, Guitar, Drums & Bass (songs that high
 instruments, e.g. "Can't Stop"), Gaming / Hype, Country / Folk, EDM, Car, 90s–2000s Rock /
 Grunge; ideas offered: Late Night, Golden Hour, Feel-Good, Sad, Groove, Rainy Day, Dreamy,
 Slow Jams / R&B, Instrumental, Morning.
+
+**Progress as of 2026-10-22 (stopped for the day):** `start-over` done (21 app playlists
+removed from Spotify, backup `data\backups\curator-before-start-over-20261022T034843.sqlite3`).
+Enrich: Last.fm cached; MusicBrainz stopped at ~850/1248 (resume with
+`curator enrich --source musicbrainz`); AcousticBrainz has 1,029/1,248 songs. Coverage
+1,229/1,248 tagged, 1,106 with song-level data. **No playlists defined yet**: next step is the
+16-line `describe` block (names: 80s, Chill, Indie, Sleep, Study, Classical, Workout, Groove,
+Rap, Heavy, Riffs, Game, Folk, EDM, Drive, Alt Rock), then `curator draft`. "Lavender Buds"
+has only junk Last.fm tags and no AcousticBrainz data, so it's judged by artist only: pin it
+with `curator feedback "Chill" essential "Lavender Buds"` once Chill exists.
 
 Library: 1,248 recordings, 31 old playlists, 5 local files. Maintenance stays scheduled daily
 09:00 with auto-apply on; with no playlists defined it changes nothing, and it never creates
