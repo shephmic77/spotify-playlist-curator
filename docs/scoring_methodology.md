@@ -140,6 +140,12 @@ Song vectors here are the song's own sound (see `data_sources.md`): vibe words a
 era labels only for the playlist that names them (its similarity matrix includes just those
 label columns).
 
+**Style** (`draft --style`, saved in `meta.draft_style`, default **inclusive**, the owner's
+choice 2026-10-24): inclusive multiplies the bar by 0.8, raises the size cap to 35% and puts
+review-band songs in; balanced is the original rule (cap 20%, review band kept for review);
+strict multiplies the bar by 1.1 and caps at 15%. The owner prunes in Spotify; manual edits feed
+back as keep / reject on the next sync.
+
 **Automatic examples**: a playlist with fewer than 3 examples from you is topped up to 5 by
 `pick_auto_examples`: the songs whose own data best matches its description (tag score ≥ 0.2,
 song-level data only, one per artist, never a song you rejected there, required / avoided tags

@@ -79,6 +79,10 @@ All phases are complete. How each was built: [docs/project_plan.md](docs/project
   that ask for them**, so MF DOOM's "Lavender Buds" can land in Chill instead of Rap. See how a
   song is read with `curator tags song "Lavender Buds"`; reclassify any tag with
   `curator tags set "indie" vibe`.
+- **Inclusive by default** (`curator draft --style inclusive|balanced|strict`): playlists take
+  in borderline songs too, with a lower bar and room for up to 35% of your library each. Play
+  them, remove what doesn't belong and add what's missing in Spotify; the next sync or daily run
+  learns from those edits (removed = reject, added = keep).
 - **No hand-picking needed**: a playlist you only described gets example songs picked
   automatically from its description (the best-matching songs, one per artist). Your own
   examples and keep/reject decisions always come first.
@@ -247,6 +251,8 @@ curator tags song "Title"   # how one song is judged (its own sound, labels, aud
 curator tags songs [--playlist "Name"]   # every song with its descriptors
 curator tags set "tag" vibe|genre|era|ignore|default
 curator draft --coverage on|off   # every song in at least one playlist (default on)
+curator draft --style inclusive|balanced|strict   # how generous playlists are (saved)
+curator identities dedupe   # retire playlists created twice under the same name
 curator start-over          # backup, remove the app's playlists from Spotify, wipe definitions
 curator purge               # delete local database + tokens; does not touch Spotify
 curator -v import           # debug logging
@@ -263,7 +269,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 237 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
+pytest            # 239 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
 ruff check . && ruff format --check .
 ```
 
