@@ -301,6 +301,7 @@ def score_playlist(
     previous: set[str] | None = None,
     hide: set[str] | None = None,
     auto_examples: set[str] | None = None,
+    style: str = "balanced",
 ) -> PlaylistDraft:
     """Score one playlist. ``previous`` = songs in its last draft (they get the lower exit
     bar, for stability); ``hide`` = example URIs to ignore (holdout evaluation);
@@ -441,11 +442,14 @@ def score_playlist(
     # isn't a playlist identity. Raise the bar to the score at that share.
     tagged = sorted((s.score for s in scores.values() if s.score > 0), reverse=True)
     n_tagged = sum(1 for r in lib.rids if lib.vectors[r])
-    cap_rank = int(MAX_SHARE * n_tagged)
+    st = STYLES.get(style, STYLES["balanced"])
+    threshold = min(THRESHOLD_MAX, max(THRESHOLD_MIN * st["bar"], threshold * st["bar"]))
+    share = st["share"]
+    cap_rank = int(share * n_tagged)
     if cap_rank and len(tagged) > cap_rank and tagged[cap_rank] >= threshold:
         threshold = min(THRESHOLD_MAX, tagged[cap_rank] + 1e-6)
         draft.notes.append(
-            f"definition is broad: capped at about {round(100 * MAX_SHARE)}% of your library; "
+            f"definition is broad: capped at about {round(100 * share)}% of your library; "
             "add more specific tags or examples to sharpen it"
         )
     draft.threshold = round(threshold, 3)
@@ -470,8 +474,13 @@ def score_playlist(
             s.reasons.append("kept from the last draft (stays unless it falls clearly below)")
             draft.include.append(s)
         elif s.score >= threshold - REVIEW_BAND and s.score > 0:
-            s.decision = "review"
-            draft.review.append(s)
+            if st["borderline_in"]:
+                s.decision = "include"
+                s.reasons.append("borderline: in because playlists are set to inclusive")
+                draft.include.append(s)
+            else:
+                s.decision = "review"
+                draft.review.append(s)
     for bucket in (draft.include, draft.review):
         bucket.sort(key=lambda x: -x.score)
     dropped = [r for r in refs if scores.get(r) and scores[r].decision == "out"]
@@ -483,6 +492,27 @@ def score_playlist(
 # ---------------------------------------------------------------------------
 # Whole collection
 # ---------------------------------------------------------------------------
+
+
+# How generous playlists are. Inclusive (default): a lower bar and a bigger size cap, and
+# borderline songs go in too; you prune in Spotify and the app learns from what you remove.
+STYLES: dict[str, dict[str, float]] = {
+    "inclusive": {"bar": 0.8, "share": 0.35, "borderline_in": 1.0},
+    "balanced": {"bar": 1.0, "share": MAX_SHARE, "borderline_in": 0.0},
+    "strict": {"bar": 1.1, "share": 0.15, "borderline_in": 0.0},
+}
+STYLE_KEY = "draft_style"
+
+
+def draft_style(db: Database) -> str:
+    s = db.get_meta(STYLE_KEY) or "inclusive"
+    return s if s in STYLES else "inclusive"
+
+
+def set_style(db: Database, style: str) -> None:
+    if style not in STYLES:
+        raise ValueError(f"style must be one of: {', '.join(STYLES)}")
+    db.set_meta(STYLE_KEY, style)
 
 
 COVERAGE_KEY = "draft_coverage"
@@ -545,6 +575,7 @@ def build_drafts(
     descriptors: dict[str, Descriptors] | None = None,
     coverage: bool | None = None,  # None = your saved setting (on unless you turned it off)
     auto_examples: bool = True,
+    style: str | None = None,  # None = your saved setting (inclusive unless you changed it)
 ) -> DraftResult:
     lib = load_library(db, descriptors)
     prev_run = latest_run(db)
@@ -563,6 +594,7 @@ def build_drafts(
             lib,
             previous=previous.get(ident.identity_id),
             auto_examples=pick_auto_examples(db, ident, lib) if auto_examples else None,
+            style=style or draft_style(db),
         )
         for ident in list_identities(db)
     ]

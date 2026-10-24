@@ -123,11 +123,14 @@ def cmd_draft(settings: Settings, args: argparse.Namespace) -> int:
     with db:
         if args.coverage:
             sc.set_coverage(db, args.coverage == "on")
+        if args.style:
+            sc.set_style(db, args.style)
         if not idn.list_identities(db):
             print('No playlists defined yet. Make one: curator describe "..." --create "Name"')
             return 1
         res = sc.build_drafts(db)
         cov = sc.coverage_enabled(db)
+        print(f"Style: {sc.draft_style(db)} (change with --style balanced or strict)")
     total = len(res.unassigned) + len({s.recording_id for d in res.drafts for s in d.include})
     print(
         f"Draft #{res.run_id}: {len(res.drafts)} playlists from {total} songs. "
@@ -420,6 +423,11 @@ def register(sub: Any) -> None:
         "--coverage",
         choices=["on", "off"],
         help="every song in at least one playlist (default on; saved)",
+    )
+    p.add_argument(
+        "--style",
+        choices=list(sc.STYLES),
+        help="how generous playlists are: inclusive (default), balanced, strict (saved)",
     )
     p.set_defaults(func=cmd_draft)
 

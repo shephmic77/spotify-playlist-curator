@@ -328,6 +328,21 @@ def cmd_identities_status(settings: Settings, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_identities_dedupe(settings: Settings, args: argparse.Namespace) -> int:
+    db = _db(settings)
+    if db is None:
+        return 1
+    with db:
+        out = idn.retire_duplicates(db)
+    if not out:
+        print("No duplicate playlists.")
+        return 0
+    for name, keep, extra in out:
+        print(f"  {name}: kept #{keep}, retired " + ", ".join(f"#{i}" for i in extra))
+    print(f"\n{len(out)} duplicate(s) fixed. Rebuild the drafts: curator draft")
+    return 0
+
+
 def register(sub: Any) -> None:
     intents = sub.add_parser("intents", help="describe what your old playlists were for")
     isub = intents.add_subparsers(dest="intents_command", required=True)
@@ -405,6 +420,9 @@ def register(sub: Any) -> None:
     p.add_argument("--like", help="copy tags, rules and example songs from this playlist")
     p.add_argument("--handpicked", action="store_true", help="never add songs automatically")
     p.set_defaults(func=cmd_identities_new)
+    dsub.add_parser("dedupe", help="retire playlists created twice under one name").set_defaults(
+        func=cmd_identities_dedupe
+    )
     p = dsub.add_parser("status", help="approve, reject or retire")
     p.add_argument("ref")
     p.add_argument("status", choices=idn.STATUSES)

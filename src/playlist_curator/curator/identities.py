@@ -71,6 +71,8 @@ def get_identity(db: Database, ref: str | int) -> Identity:
         if hit:
             return _row(db, hit[0])
     hit = [r for r in rows if r["name"].casefold() == str(ref).casefold()]
+    if len(hit) > 1:  # a retired copy never makes a name ambiguous
+        hit = [r for r in hit if r["status"] == "approved"] or hit
     if len(hit) == 1:
         return _row(db, hit[0])
     if len(hit) > 1:
@@ -149,6 +151,16 @@ def create_identity(
     """Create a playlist without a proposal, optionally copying rules and examples from another."""
     if kind not in KINDS:
         raise ValueError(f"kind must be one of: {', '.join(KINDS)}")
+    clash = db.conn.execute(
+        "SELECT identity_id, name FROM identities "
+        "WHERE status='approved' AND name=? COLLATE NOCASE",
+        (name.strip(),),
+    ).fetchone()
+    if clash:
+        raise ValueError(
+            f"You already have a playlist called '{clash[1]}' (#{clash[0]}). To change it, use "
+            f'--apply "{clash[1]}" instead of --create.'
+        )
     rules: dict[str, Any] = {
         "tags": {},
         "avoid_tags": [],
@@ -185,6 +197,43 @@ def create_identity(
                 (new_id, now, source.identity_id),
             )
     return get_identity(db, new_id)
+
+
+def retire_duplicates(db: Database) -> list[tuple[str, int, list[int]]]:
+    """Playlists created twice under the same name: keep the oldest, retire the copies.
+    Retired definitions stay in the database (nothing is deleted) and can be re-approved."""
+    out = []
+    rows = db.conn.execute(
+        "SELECT identity_id, name FROM identities WHERE status='approved' ORDER BY identity_id"
+    ).fetchall()
+    seen: dict[str, int] = {}
+    dupes: dict[int, list[int]] = {}
+    for r in rows:
+        key = r["name"].strip().casefold()
+        if key in seen:
+            dupes.setdefault(seen[key], []).append(r["identity_id"])
+        else:
+            seen[key] = r["identity_id"]
+    now = utcnow()
+    for keep, extra in dupes.items():
+        for iid in extra:
+            # songs you marked in a copy (keep / reject / essential) move to the one kept
+            db.conn.execute(
+                "UPDATE OR IGNORE identity_examples SET identity_id=? WHERE identity_id=?",
+                (keep, iid),
+            )
+            db.conn.execute(
+                "UPDATE OR IGNORE feedback SET identity_id=? WHERE identity_id=?", (keep, iid)
+            )
+            db.conn.execute(
+                "UPDATE identities SET status='retired', updated_at=? WHERE identity_id=?",
+                (now, iid),
+            )
+        name = db.conn.execute(
+            "SELECT name FROM identities WHERE identity_id=?", (keep,)
+        ).fetchone()
+        out.append((name[0], keep, extra))
+    return out
 
 
 def set_status(db: Database, ref: str | int, status: str) -> Identity:

@@ -293,3 +293,24 @@ def test_auto_examples_are_one_per_artist(db):
     picked = pick_auto_examples(db, idn.get_identity(db, "Chill"), lib2)
     artists = [lib2.titles[r].split(" — ")[-1] for r in picked]
     assert len(picked) == 5 and len(set(artists)) == 5
+
+
+def test_a_name_can_only_be_created_once_and_duplicates_can_be_fixed(db, lib):
+    idn.create_identity(db, "Chill")
+    with pytest.raises(ValueError, match="already have a playlist called 'Chill'"):
+        idn.create_identity(db, "chill")
+    # duplicates made before this check existed
+    db.conn.execute(
+        "INSERT INTO identities (name, kind, concept, status, auto_maintain, rules_json, "
+        "origin_json, created_at, updated_at) SELECT name, kind, concept, status, auto_maintain,"
+        " rules_json, origin_json, created_at, updated_at FROM identities WHERE name='Chill'"
+    )
+    copy = max(r[0] for r in db.conn.execute("SELECT identity_id FROM identities"))
+    _example(db, idn.get_identity(db, copy), "spotify:track:chill1", "essential")
+    out = idn.retire_duplicates(db)
+    assert out == [("Chill", 1, [copy])]
+    assert [i.name for i in idn.list_identities(db)] == ["Chill"]
+    assert idn.get_identity(db, "Chill").identity_id == 1  # retired copy doesn't clash
+    roles = db.conn.execute("SELECT role FROM identity_examples WHERE identity_id=1").fetchall()
+    assert [r[0] for r in roles] == ["essential"]  # your marks move to the kept one
+    assert idn.retire_duplicates(db) == []
