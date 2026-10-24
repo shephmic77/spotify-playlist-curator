@@ -66,6 +66,8 @@ REJECT_PENALTY = 0.80
 MAX_SHARE = 0.20  # a playlist may hold at most this share of the tagged library
 MAX_OVERLAPS_REPORTED = 10
 OVERLAP_REPORT = 0.7
+AUTO_EXAMPLES = 5  # a playlist with fewer examples from you is topped up to this many
+AUTO_MIN_TAG_SCORE = 0.2  # an automatic example must match the description at least this well
 STICKY_RANK = (
     0.05  # a weak-fit song stays in last draft's playlist unless another is clearly closer
 )
@@ -234,6 +236,63 @@ def _top_tag_reasons(vec: dict[str, float], weights: dict[str, float], n: int = 
     return ", ".join(t for t, _ in contrib)
 
 
+def _artist(lib: Library, rid: str) -> str:
+    return lib.titles.get(rid, "").split(" — ", 1)[-1].split(",")[0].strip().lower()
+
+
+def pick_auto_examples(
+    db: Database, ident: Identity, lib: Library, *, k: int = AUTO_EXAMPLES
+) -> set[str]:
+    """Example songs the app picks itself when you've given fewer than 3.
+
+    The songs whose own data best matches the playlist's description (tag score), judged by
+    song-level data only, one per artist for variety, never a song you rejected there, and
+    respecting required / avoided tags and years. Recomputed every draft, never stored; your
+    own examples and decisions always come first."""
+    if not ident.auto_maintain:
+        return set()
+    ex = _examples(db, ident.identity_id, lib)
+    have = ex["reference"] | ex["essential"]
+    if len(have) >= 3:
+        return set()
+    rules = ident.rules
+    weights = {t: float(w) for t, w in (rules.get("tags") or {}).items()}
+    if not weights:
+        return set()
+    eff = {t: w * lib.idf.get(t, 1.0) for t, w in weights.items()}
+    wsum = sum(eff.values())
+    avoid = set(rules.get("avoid_tags") or [])
+    required = set(rules.get("require_tags") or [])
+    years = rules.get("years")
+    cands = []
+    for rid in lib.rids:
+        if rid in ex["exclude"] or rid in have or lib.evidence.get(rid) != "song":
+            continue
+        vec = lib.vectors[rid]
+        if required and not any(vec.get(t, 0.0) >= TAG_PRESENT for t in required):
+            continue
+        if max((vec.get(t, 0.0) for t in avoid), default=0.0) >= AVOID_VETO:
+            continue
+        y = lib.years.get(rid)
+        if years and y and not (years[0] <= y <= years[1]):
+            continue
+        ts = sum(w * vec.get(t, 0.0) for t, w in eff.items()) / wsum
+        if ts >= AUTO_MIN_TAG_SCORE:
+            cands.append((ts, rid))
+    cands.sort(key=lambda x: (-x[0], x[1]))
+    picked: list[str] = []
+    artists = {_artist(lib, r) for r in have}
+    for _ts, rid in cands:
+        a = _artist(lib, rid)
+        if a in artists:
+            continue
+        picked.append(rid)
+        artists.add(a)
+        if len(picked) + len(have) >= k:
+            break
+    return set(picked)
+
+
 def score_playlist(
     db: Database,
     ident: Identity,
@@ -241,11 +300,15 @@ def score_playlist(
     *,
     previous: set[str] | None = None,
     hide: set[str] | None = None,
+    auto_examples: set[str] | None = None,
 ) -> PlaylistDraft:
     """Score one playlist. ``previous`` = songs in its last draft (they get the lower exit
-    bar, for stability); ``hide`` = example URIs to ignore (holdout evaluation)."""
+    bar, for stability); ``hide`` = example URIs to ignore (holdout evaluation);
+    ``auto_examples`` = examples the app picked itself (``pick_auto_examples``)."""
     ex = _examples(db, ident.identity_id, lib, hide)
     refs, essential, excluded = ex["reference"], ex["essential"], ex["exclude"]
+    auto = (auto_examples or set()) - excluded
+    refs = refs | auto
     rules = ident.rules
     weights = {t: float(w) for t, w in (rules.get("tags") or {}).items()}
     avoid = set(rules.get("avoid_tags") or [])
@@ -294,7 +357,8 @@ def score_playlist(
                 pairs.sort(key=lambda x: -x[0])
                 top = pairs[:TOP_K_EXAMPLES]
                 example_score = float(np.mean([p[0] for p in top]))
-                reasons.append(f"sounds like {lib.titles[top[0][1]]} ({top[0][0]:.2f})")
+                tag = " (auto-picked example)" if top[0][1] in auto else ""
+                reasons.append(f"sounds like {lib.titles[top[0][1]]} ({top[0][0]:.2f}){tag}")
         parts = [x for x in (tag_score, example_score) if x is not None]
         score = sum(parts) / len(parts) if parts else 0.0
         if tag_score:
@@ -368,6 +432,11 @@ def score_playlist(
     else:
         threshold = DEFAULT_THRESHOLD
         draft.notes.append("fewer than 3 usable example songs: using the default threshold")
+    if auto:
+        draft.notes.append(
+            f"{len(auto)} example song(s) picked automatically from the description "
+            "(your own picks always come first)"
+        )
     # No playlist may take more than MAX_SHARE of the tagged library: a definition that broad
     # isn't a playlist identity. Raise the bar to the score at that share.
     tagged = sorted((s.score for s in scores.values() if s.score > 0), reverse=True)
@@ -475,6 +544,7 @@ def build_drafts(
     *,
     descriptors: dict[str, Descriptors] | None = None,
     coverage: bool | None = None,  # None = your saved setting (on unless you turned it off)
+    auto_examples: bool = True,
 ) -> DraftResult:
     lib = load_library(db, descriptors)
     prev_run = latest_run(db)
@@ -487,7 +557,13 @@ def build_drafts(
         ):
             previous[iid].add(rid)
     drafts = [
-        score_playlist(db, ident, lib, previous=previous.get(ident.identity_id))
+        score_playlist(
+            db,
+            ident,
+            lib,
+            previous=previous.get(ident.identity_id),
+            auto_examples=pick_auto_examples(db, ident, lib) if auto_examples else None,
+        )
         for ident in list_identities(db)
     ]
     if coverage if coverage is not None else coverage_enabled(db):

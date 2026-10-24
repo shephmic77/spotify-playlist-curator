@@ -252,3 +252,44 @@ def test_leftovers_go_where_they_rank_highest_not_to_the_broadest_playlist(db, l
     # "Odd One" is only faintly groovy: it ranks near the top of Funky's candidates but low
     # among Broad's, so it goes to Funky even though Broad's long list also touches it
     assert "spotify:track:odd" in _uris(db, d["Funky"])
+
+
+def test_playlists_pick_their_own_examples_when_you_give_none(db, lib):
+    chill = idn.create_identity(db, "Chill")
+    idn.edit_identity(db, chill.identity_id, add_tags={"chill": 1.0, "mellow": 0.8})
+    rec = {r[1]: r[0] for r in db.conn.execute("SELECT recording_id, primary_uri FROM recordings")}
+    from playlist_curator.curator.scoring import load_library, pick_auto_examples
+
+    library = load_library(db, lib)
+    auto = pick_auto_examples(db, idn.get_identity(db, "Chill"), library)
+    assert {rec["spotify:track:chill1"], rec["spotify:track:chill2"]} <= auto
+    assert rec["spotify:track:rap1"] not in auto
+    _res, d = _drafts(db, lib)
+    assert any("picked automatically" in n for n in d["Chill"].notes)
+    assert not any("default threshold" in n for n in d["Chill"].notes)  # enough examples now
+
+    # never a song you rejected there; your own examples come first
+    fb.decide_uri(db, idn.get_identity(db, "Chill"), "spotify:track:chill1", "reject")
+    assert rec["spotify:track:chill1"] not in pick_auto_examples(
+        db, idn.get_identity(db, "Chill"), load_library(db, lib)
+    )
+    for u in ("spotify:track:chill2", "spotify:track:lav", "spotify:track:funk1"):
+        _example(db, idn.get_identity(db, "Chill"), u)
+    assert pick_auto_examples(db, idn.get_identity(db, "Chill"), load_library(db, lib)) == set()
+
+
+def test_auto_examples_are_one_per_artist(db):
+    songs = [
+        (f"spotify:track:s{i}", f"Song {i}", "Same Band" if i < 4 else f"Band {i}", 2010)
+        for i in range(8)
+    ]
+    add_playlist(db, "pl", "P", songs)
+    desc = descriptors_for(db, {u: {"chill": 1.0} for u, *_ in songs})
+    ident = idn.create_identity(db, "Chill")
+    idn.edit_identity(db, ident.identity_id, add_tags={"chill": 1.0})
+    from playlist_curator.curator.scoring import load_library, pick_auto_examples
+
+    lib2 = load_library(db, desc)
+    picked = pick_auto_examples(db, idn.get_identity(db, "Chill"), lib2)
+    artists = [lib2.titles[r].split(" — ")[-1] for r in picked]
+    assert len(picked) == 5 and len(set(artists)) == 5

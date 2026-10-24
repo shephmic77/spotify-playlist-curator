@@ -140,6 +140,13 @@ Song vectors here are the song's own sound (see `data_sources.md`): vibe words a
 era labels only for the playlist that names them (its similarity matrix includes just those
 label columns).
 
+**Automatic examples**: a playlist with fewer than 3 examples from you is topped up to 5 by
+`pick_auto_examples`: the songs whose own data best matches its description (tag score ≥ 0.2,
+song-level data only, one per artist, never a song you rejected there, required / avoided tags
+and years respected). They're recomputed each draft and never stored, so your own picks and
+decisions always take precedence. They give the playlist an adaptive bar and "sounds like"
+similarity instead of the default threshold.
+
 **Coverage** (default on, `draft --coverage`): after all playlists are scored, every song that
 cleared no bar is placed in the auto-maintained playlist where it **ranks highest among that playlist's own
 scored songs** (percentile; +0.05 for the playlist it was in last draft, for stability), with

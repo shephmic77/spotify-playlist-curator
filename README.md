@@ -79,6 +79,9 @@ All phases are complete. How each was built: [docs/project_plan.md](docs/project
   that ask for them**, so MF DOOM's "Lavender Buds" can land in Chill instead of Rap. See how a
   song is read with `curator tags song "Lavender Buds"`; reclassify any tag with
   `curator tags set "indie" vibe`.
+- **No hand-picking needed**: a playlist you only described gets example songs picked
+  automatically from its description (the best-matching songs, one per artist). Your own
+  examples and keep/reject decisions always come first.
 - **Every song has a home**: a song that clears no playlist's bar goes into the playlist it's
   closest to, marked as a weak fit (`curator draft` shows how many). Never into a playlist
   where you rejected it; hand-picked playlists never get extras. Turn off with
@@ -260,7 +263,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 235 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
+pytest            # 237 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
 ruff check . && ruff format --check .
 ```
 
