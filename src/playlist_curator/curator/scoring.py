@@ -66,7 +66,9 @@ REJECT_PENALTY = 0.80
 MAX_SHARE = 0.20  # a playlist may hold at most this share of the tagged library
 MAX_OVERLAPS_REPORTED = 10
 OVERLAP_REPORT = 0.7
-STICKY = 1.1  # a weak-fit song stays in last draft's playlist unless another is clearly closer
+STICKY_RANK = (
+    0.05  # a weak-fit song stays in last draft's playlist unless another is clearly closer
+)
 WEAK_FIT = "closest match (weak fit)"
 
 
@@ -428,9 +430,18 @@ def set_coverage(db: Database, on: bool) -> None:
 def place_leftovers(
     lib: Library, drafts: list[PlaylistDraft], previous: dict[int, set[str]]
 ) -> None:
-    """Put every song that cleared no bar into the playlist it comes closest to."""
+    """Put every song that cleared no bar into the playlist it comes closest to.
+
+    "Closest" is judged within each playlist: how high the song ranks among all the songs
+    that playlist scored (its percentile). A broad playlist with a long word list scores many
+    songs a little, so comparing raw scores would hand it every leftover; ranking doesn't."""
     assigned = {s.recording_id for d in drafts for s in d.include}
     auto = [d for d in drafts if d.identity.auto_maintain and d.threshold]
+    ranks: dict[int, dict[str, float]] = {}
+    for d in auto:
+        positive = sorted((s.score, r) for r, s in d.scores.items() if s.score > 0)
+        n = len(positive)
+        ranks[d.identity.identity_id] = {r: (i + 1) / n for i, (_sc, r) in enumerate(positive)}
     for rid in lib.rids:
         if rid in assigned:
             continue
@@ -439,11 +450,13 @@ def place_leftovers(
             s = d.scores.get(rid)
             if s is None or s.score <= 0 or rid in d.excluded:
                 continue
-            ratio = s.score / (d.threshold or 1.0)
+            rank = ranks[d.identity.identity_id].get(rid, 0.0)
+            # tie-break on closeness to the bar; last draft's playlist gets a small edge
+            key = rank + 0.01 * min(1.0, s.score / (d.threshold or 1.0))
             if rid in previous.get(d.identity.identity_id, set()):
-                ratio *= STICKY
-            if best is None or ratio > best[0]:
-                best = (ratio, d, s)
+                key += STICKY_RANK
+            if best is None or key > best[0]:
+                best = (key, d, s)
         if best is None:
             continue
         _ratio, d, s = best

@@ -141,9 +141,10 @@ era labels only for the playlist that names them (its similarity matrix includes
 label columns).
 
 **Coverage** (default on, `draft --coverage`): after all playlists are scored, every song that
-cleared no bar is placed in the auto-maintained playlist where score ÷ threshold is highest
-(×1.1 for the playlist it was in last draft, for stability), with the reason "closest match
-(weak fit)". Not where it was rejected; not into hand-picked playlists; songs with no data at
+cleared no bar is placed in the auto-maintained playlist where it **ranks highest among that playlist's own
+scored songs** (percentile; +0.05 for the playlist it was in last draft, for stability), with
+the reason "closest match (weak fit)". Ranking instead of raw score stops a broad playlist with
+a long word list from collecting every leftover. Not where it was rejected; not into hand-picked playlists; songs with no data at
 all stay unplaced.
 
 Examples get no free pass, so misfits from old playlists can drop out. Overlapping drafts

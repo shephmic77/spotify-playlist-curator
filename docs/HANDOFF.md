@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.2.1)
+# Handoff: Spotify Playlist Curator (v1.2.2)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then the docs it links.
@@ -29,8 +29,8 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 233 tests
-pass, `ruff` clean. Version 1.2.1 (last tag `v1.0.0`).
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 235 tests
+pass, `ruff` clean. Version 1.2.2 (last tag `v1.0.0`).
 
 ---
 
@@ -123,7 +123,7 @@ spotify-playlist-curator/
 │   ├── cli_sync.py           sync / rollback / local-files
 │   ├── cli_maintain.py       maintain / status / settings / schedule
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    233 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    235 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -240,7 +240,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 233 tests, no network
+pytest                       # 235 tests, no network
 ruff check . && ruff format --check .
 ```
 
@@ -295,6 +295,13 @@ Enrich: Last.fm cached; MusicBrainz stopped at ~850/1248 (resume with
 Rap, Heavy, Riffs, Game, Folk, EDM, Drive, Alt Rock), then `curator draft`. "Lavender Buds"
 has only junk Last.fm tags and no AcousticBrainz data, so it's judged by artist only: pin it
 with `curator feedback "Chill" essential "Lavender Buds"` once Chill exists.
+
+**2026-10-24:** enrich complete (MusicBrainz 1,156/1,248, AcousticBrainz 1,029/1,248). The
+16 playlists were created; first draft (#8) was lopsided (Study 498 songs, 440 weak; Workout 0;
+Game, Drive, Chill 1-3) because description words ("chill", "energetic") didn't meet the data's
+words ("relaxed", "party") and leftovers went to the broadest playlist. Fixed in v1.2.2 (related
+words; rank-based leftover placement). Next: `git pull`, `curator draft`, then add 2-3 examples
+per playlist (`curator feedback "Name" keep "Song"`).
 
 Library: 1,248 recordings, 31 old playlists, 5 local files. Maintenance stays scheduled daily
 09:00 with auto-apply on; with no playlists defined it changes nothing, and it never creates

@@ -44,6 +44,12 @@ is used under its API Terms (non-commercial, attribution, 100 MB cap).
   (jazz → jazzy 0.6, metal → heavy 0.6). AcousticBrainz probabilities ≥ 0.6 become vibe words
   at 0.7 × (p − 0.5) / 0.5. Artist tags are used only for songs with no song-level data at all,
   at 0.5 weight and flagged. The owner's own tag classes (`tag_classes`) override the rules.
+- **Related words** (`vibes.IMPLIES`, one step, never chained): a song carrying "relaxed"
+  also counts for "chill" (×0.8), "calm" (×0.7)...; "party" for "energetic" (×0.6) and so on,
+  so descriptions in everyday words meet audio data that uses different words. A word the song
+  carries itself is never lowered.
+- Unrecognized tags ("other") are ignored; on less-played songs they're mostly radio stations
+  and playlist names. `curator tags --class other` lists them for promotion.
 - `combined = max(song-level weight, 0.6 × artist-level weight)` is still used to describe old
   playlists (`curator analyze`), not for matching.
 - Original release year = earliest of MusicBrainz first-release year and Spotify release year

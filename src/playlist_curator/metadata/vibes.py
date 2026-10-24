@@ -879,6 +879,68 @@ def _fold(
                 put(vibe, adj, SOUND_GENRE_WEIGHT * f * w)
 
 
+# Related words, so a description and the data meet even when they use different words: the
+# audio data says "relaxed" and "fast", people say "chill" and "energetic". A song carrying the
+# word on the left also counts for the words on the right, at the given share of its weight
+# (one step only, never chained). Fixed, readable rules.
+IMPLIES: dict[str, dict[str, float]] = {
+    "relaxed": {"chill": 0.8, "calm": 0.7, "mellow": 0.7, "laid-back": 0.6},
+    "chill": {"relaxed": 0.8, "mellow": 0.7, "laid-back": 0.7, "calm": 0.5},
+    "mellow": {"chill": 0.7, "relaxed": 0.7, "soft": 0.5, "calm": 0.5},
+    "calm": {"relaxed": 0.8, "chill": 0.6, "soft": 0.6, "sleep": 0.5},
+    "laid-back": {"chill": 0.7, "relaxed": 0.6},
+    "soft": {"calm": 0.5, "mellow": 0.5},
+    "slow": {"calm": 0.4, "sleep": 0.4},
+    "minimal": {"calm": 0.3},
+    "happy": {"feel-good": 0.8, "upbeat": 0.5, "cheerful": 0.7},
+    "cheerful": {"happy": 0.8, "feel-good": 0.7, "upbeat": 0.5},
+    "feel-good": {"happy": 0.8, "upbeat": 0.6},
+    "upbeat": {"energetic": 0.5, "happy": 0.4},
+    "party": {"energetic": 0.6, "hype": 0.6, "danceable": 0.6, "upbeat": 0.6},
+    "danceable": {"groovy": 0.5, "upbeat": 0.5, "party": 0.4},
+    "groovy": {"danceable": 0.5, "funky": 0.4},
+    "funky": {"groovy": 0.8, "danceable": 0.4},
+    "aggressive": {"intense": 0.8, "energetic": 0.7, "heavy": 0.5, "hype": 0.5},
+    "intense": {"energetic": 0.7, "aggressive": 0.5, "hype": 0.5},
+    "energetic": {"upbeat": 0.6, "hype": 0.6, "intense": 0.4, "workout": 0.4},
+    "hype": {"energetic": 0.8, "workout": 0.5},
+    "heavy": {"intense": 0.6, "loud": 0.6, "energetic": 0.4},
+    "fast": {"energetic": 0.5, "upbeat": 0.4},
+    "busy": {"energetic": 0.4},
+    "passionate": {"emotional": 0.6, "powerful": 0.5, "energetic": 0.3},
+    "sad": {"melancholic": 0.8, "emotional": 0.5},
+    "melancholic": {"sad": 0.7, "bittersweet": 0.5, "moody": 0.5},
+    "bittersweet": {"melancholic": 0.6, "nostalgic": 0.4, "emotional": 0.5},
+    "dark": {"moody": 0.7},
+    "moody": {"dark": 0.5, "late night": 0.4},
+    "dreamy": {"atmospheric": 0.6, "chill": 0.4},
+    "atmospheric": {"dreamy": 0.5, "calm": 0.3},
+    "synth": {"electronic": 0.6},
+    "electronic": {"synth": 0.6},
+    "acoustic": {"soft": 0.3, "guitar": 0.4},
+    "lo-fi": {"chill": 0.6, "focus": 0.5},
+    "instrumental": {"focus": 0.5},
+    "jazzy": {"smooth": 0.4},
+    "soulful": {"smooth": 0.4, "emotional": 0.4},
+    "smooth": {"mellow": 0.4},
+    "riffs": {"guitar": 0.8},
+    "playful": {"quirky": 0.6, "happy": 0.4},
+    "summer": {"feel-good": 0.5, "upbeat": 0.4},
+    "driving": {"upbeat": 0.4},
+}
+
+
+def _expand(vibe: dict[str, float]) -> None:
+    """Add related words (one step) at a share of the original weight; keeps the max."""
+    implied: dict[str, float] = {}
+    for word, w in vibe.items():
+        for other, f in IMPLIES.get(word, {}).items():
+            implied[other] = max(implied.get(other, 0.0), round(w * f, 4))
+    for other, w in implied.items():
+        if w > vibe.get(other, 0.0):
+            vibe[other] = w
+
+
 def profile(by_source: dict[str, dict[str, float]], classes: TagClasses) -> SongProfile:
     """How one song sounds, from its own data first; artist tags only as a flagged fallback."""
     vibe: dict[str, float] = {}
@@ -887,10 +949,12 @@ def profile(by_source: dict[str, dict[str, float]], classes: TagClasses) -> Song
         if by_source.get(src):
             _fold(by_source[src], classes, vibe, labels)
     if vibe or labels:
+        _expand(vibe)
         return SongProfile(vibe, labels, "song")
     for src in ARTIST_SOURCES:
         if by_source.get(src):
             _fold(by_source[src], classes, vibe, labels, scale=ARTIST_FALLBACK)
+    _expand(vibe)
     return SongProfile(vibe, labels, "artist" if (vibe or labels) else "none")
 
 

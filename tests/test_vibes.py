@@ -55,13 +55,13 @@ def test_a_song_is_judged_by_its_own_sound_not_its_artist():
 
 def test_artist_tags_are_only_a_flagged_last_resort():
     p = vibes.profile({"lastfm_artist": {"chill": 1.0, "rap": 1.0}}, C)
-    assert p.evidence == "artist" and p.vibe == {"chill": vibes.ARTIST_FALLBACK}
+    assert p.evidence == "artist" and p.vibe["chill"] == vibes.ARTIST_FALLBACK
     assert vibes.profile({}, C).evidence == "none"
 
 
 def test_audio_measures_count_as_the_songs_own():
     p = vibes.profile({"acousticbrainz": {"relaxed": 0.5, "instrumental": 0.6}}, C)
-    assert p.evidence == "song" and p.vibe == {"relaxed": 0.5, "instrumental": 0.6}
+    assert p.evidence == "song" and p.vibe["relaxed"] == 0.5 and p.vibe["instrumental"] == 0.6
 
 
 def test_your_tag_choices_win(db):
@@ -219,7 +219,36 @@ def test_junk_tags_are_ignored():
         assert C.of(t) in ("ignore", "other")
     assert C.of("wsum 91.7 fm madison") == C.of("cityscape with dj bean") == "ignore"
     p = vibes.profile({"lastfm_track": junk, "acousticbrainz": {"relaxed": 0.6}}, C)
-    assert p.vibe == {"relaxed": 0.6} and p.evidence == "song"
+    assert (
+        p.vibe["relaxed"] == 0.6
+        and not ({"wsum 91.7 fm madison"} & set(p.vibe))
+        and p.evidence == "song"
+    )
     # junk-only song tags don't count as "song data": falls back to the artist, flagged
     p = vibes.profile({"lastfm_track": junk, "lastfm_artist": {"chill": 1.0}}, C)
     assert p.evidence == "artist"
+
+
+def test_related_words_let_descriptions_and_data_meet():
+    # AcousticBrainz says "relaxed" and "party"; people say "chill" and "energetic"
+    p = vibes.profile({"acousticbrainz": {"relaxed": 0.7, "party": 0.5}}, C)
+    assert p.vibe["chill"] == round(0.7 * 0.8, 4) and p.vibe["calm"] > 0
+    assert p.vibe["energetic"] == round(0.5 * 0.6, 4)
+    # one step only, and a word the song carries itself is never lowered
+    p = vibes.profile({"lastfm_track": {"chill": 0.9, "relaxed": 0.2}}, C)
+    assert p.vibe["chill"] == 0.9 and p.vibe["relaxed"] == round(0.9 * 0.8, 4)
+
+
+def test_leftovers_go_where_they_rank_highest_not_to_the_broadest_playlist(db, lib):
+    broad = idn.create_identity(db, "Broad")
+    idn.edit_identity(
+        db,
+        broad.identity_id,
+        add_tags={t: 1.0 for t in ("chill", "mellow", "groovy", "aggressive", "jazzy", "lo-fi")},
+    )
+    funky = idn.create_identity(db, "Funky")
+    idn.edit_identity(db, funky.identity_id, add_tags={"funky": 1.0, "groovy": 1.0})
+    _res, d = _drafts(db, lib)
+    # "Odd One" is only faintly groovy: it ranks near the top of Funky's candidates but low
+    # among Broad's, so it goes to Funky even though Broad's long list also touches it
+    assert "spotify:track:odd" in _uris(db, d["Funky"])
