@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "playlist-curator"
-version = "1.4.0"
+version = "1.4.1"
 description = "Personal Spotify playlist curator: rebuilds and maintains playlists from your own music crate."
 readme = "README.md"
 requires-python = ">=3.12"

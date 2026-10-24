@@ -253,6 +253,7 @@ curator tags set "tag" vibe|genre|era|ignore|default
 curator draft --coverage on|off   # every song in at least one playlist (default on)
 curator draft --style inclusive|balanced|strict   # how generous playlists are (saved)
 curator identities dedupe   # retire playlists created twice under the same name
+curator sync prune          # remove from Spotify the app-made copies of retired playlists
 curator start-over          # backup, remove the app's playlists from Spotify, wipe definitions
 curator purge               # delete local database + tokens; does not touch Spotify
 curator -v import           # debug logging
@@ -269,7 +270,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 239 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
+pytest            # 240 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
 ruff check . && ruff format --check .
 ```
 

@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.4.0)
+# Handoff: Spotify Playlist Curator (v1.4.1)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then the docs it links.
@@ -29,8 +29,8 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 239 tests
-pass, `ruff` clean. Version 1.4.0 (last tag `v1.0.0`).
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 240 tests
+pass, `ruff` clean. Version 1.4.1 (last tag `v1.0.0`).
 
 ---
 
@@ -123,7 +123,7 @@ spotify-playlist-curator/
 │   ├── cli_sync.py           sync / rollback / local-files
 │   ├── cli_maintain.py       maintain / status / settings / schedule
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    239 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    240 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -240,7 +240,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 239 tests, no network
+pytest                       # 240 tests, no network
 ruff check . && ruff format --check .
 ```
 
@@ -305,7 +305,10 @@ v1.3.0 picks them automatically per playlist (`scoring.pick_auto_examples`). The
 playlist twice: the describe block had been run twice and `--create` didn't refuse an existing
 name (fixed in v1.4.0; `curator identities dedupe` retires the copies). The owner wants
 **inclusive** playlists that he prunes in Spotify (now the default style). Next: `git pull`,
-`curator identities dedupe`, `curator draft`, `curator sync`, `curator sync --apply`.
+`curator identities dedupe`, `curator draft`, `curator sync`, `curator sync --apply`. If the
+duplicated sync was applied, `curator identities dedupe` + `curator sync prune` removes the
+copies from Spotify. After that: he listens for a while and prunes in Spotify; next session,
+review what his edits taught the app (`curator stats --evaluate`, `curator decisions`).
 
 Library: 1,248 recordings, 31 old playlists, 5 local files. Maintenance stays scheduled daily
 09:00 with auto-apply on; with no playlists defined it changes nothing, and it never creates

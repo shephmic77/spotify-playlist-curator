@@ -80,3 +80,28 @@ def test_cli_start_over_needs_typed_confirmation(env, fake, client, capsys, monk
     out = capsys.readouterr().out
     assert "wiped 1 definition(s)" in out and "curator describe" in out
     assert list((env / "data" / "backups").glob("curator-before-start-over-*.sqlite3"))
+
+
+@pytest.mark.usefixtures("setup")
+def test_prune_removes_only_playlists_of_retired_definitions(fake, client, db):
+    from playlist_curator.curator import scoring as sc
+
+    keep_sid = first_sync(db, client)
+    # a duplicate definition that also got synced
+    db.conn.execute(
+        "INSERT INTO identities (name, kind, concept, status, auto_maintain, rules_json, "
+        "origin_json, created_at, updated_at) SELECT name, kind, concept, status, auto_maintain,"
+        " rules_json, origin_json, created_at, updated_at FROM identities WHERE name='Night Drive'"
+    )
+    sc.build_drafts(db, descriptors=__import__("test_sync").descriptors(db))
+    res = sync.apply(db, client, sync.plan(db, client))
+    dup_sid = next(a["spotify_id"] for a in res.applied if a["action"] == "create")
+    assert dup_sid != keep_sid
+    idn.retire_duplicates(db)
+    out = sync.prune_retired(db, client)
+    assert out["removed"] == ["Night Drive"]
+    ids_left = {p["id"] for p in fake.lib["playlists"]}
+    assert keep_sid in ids_left and dup_sid not in ids_left
+    assert sync.prune_retired(db, client) == {"removed": [], "failed": []}
+    # the plan only covers the kept one
+    assert [p.name for p in sync.plan(db, client).playlists] == ["Night Drive"]

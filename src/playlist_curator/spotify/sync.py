@@ -539,3 +539,36 @@ def start_over(
             counts[t] = db.conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
             db.conn.execute(f"DELETE FROM {t}")
     return {"backup": str(path), "removed": removed, "failed": failed, "wiped": counts}
+
+
+def prune_retired(
+    db: Database, client: SpotifyClient, *, progress: Callable[[str], None] | None = None
+) -> dict[str, Any]:
+    """Remove from Spotify the app-made playlists whose definition you retired or rejected
+    (for example a copy retired by `identities dedupe`). Only app-made playlists, guarded."""
+    say = progress or (lambda _m: None)
+    rows = db.conn.execute(
+        "SELECT m.identity_id, m.spotify_id, m.name FROM managed_playlists m "
+        "JOIN identities i ON i.identity_id = m.identity_id "
+        "WHERE i.status != 'approved' AND m.status != 'released'"
+    ).fetchall()
+    removed, failed = [], []
+    for r in rows:
+        _guard(db, r["spotify_id"])
+        try:
+            client.remove_playlists_from_library([r["spotify_id"]])
+            removed.append(r["name"])
+            say(f"Removed '{r['name']}' (retired copy) from Spotify")
+        except SpotifyAPIError as exc:
+            failed.append({"playlist": r["name"], "error": exc.message})
+            continue
+        db.conn.execute(
+            "UPDATE managed_playlists SET status='released' WHERE identity_id=?",
+            (r["identity_id"],),
+        )
+    if rows:
+        db.set_meta(
+            RETIRED_KEY,
+            json.dumps(sorted(retired_ids(db) | {r["spotify_id"] for r in rows})),
+        )
+    return {"removed": removed, "failed": failed}

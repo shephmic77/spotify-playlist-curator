@@ -288,6 +288,21 @@ def cmd_start_over(settings: Settings, args: argparse.Namespace) -> int:
     return 0 if not out["failed"] else 2
 
 
+def cmd_prune(settings: Settings, args: argparse.Namespace) -> int:
+    db = _db(settings)
+    if db is None:
+        return 1
+    with db:
+        if not _can_write(settings):
+            return 1
+        out = sync.prune_retired(db, _client(settings), progress=print)
+    if not out["removed"] and not out["failed"]:
+        print("Nothing to remove: every app-made playlist belongs to an active definition.")
+    for f in out["failed"]:
+        print(f"  ! {f['playlist']}: {f['error']}")
+    return 0 if not out["failed"] else 2
+
+
 def register(sub: Any) -> None:
     p = sub.add_parser("sync", help="preview (and with --apply, write) your playlists to Spotify")
     p.add_argument("--apply", action="store_true", help="write the previewed changes")
@@ -305,6 +320,9 @@ def register(sub: Any) -> None:
     q = ssub.add_parser("history", help="saved states of one playlist")
     q.add_argument("playlist")
     q.set_defaults(func=cmd_history)
+    ssub.add_parser(
+        "prune", help="remove app-made playlists whose definition you retired (e.g. duplicates)"
+    ).set_defaults(func=cmd_prune)
     q = ssub.add_parser("release", help="stop syncing a playlist (it stays in Spotify)")
     q.add_argument("playlist")
     q.set_defaults(func=cmd_release)
