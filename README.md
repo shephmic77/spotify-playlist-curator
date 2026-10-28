@@ -86,8 +86,9 @@ All phases are complete. How each was built: [docs/project_plan.md](docs/project
 - **No hand-picking needed**: a playlist you only described gets example songs picked
   automatically from its description (the best-matching songs, one per artist). Your own
   examples and keep/reject decisions always come first.
-- **Every song has a home**: a song that clears no playlist's bar goes into the playlist it's
-  closest to, marked as a weak fit (`curator draft` shows how many). Never into a playlist
+- **Every song gets a home if it reasonably can**: a song that clears no playlist's bar goes
+  into the playlist it's closest to (if it's at least halfway to that bar), marked as a weak fit.
+  A song you've removed from any playlist is never pushed into another one as filler (`curator draft` shows how many). Never into a playlist
   where you rejected it; hand-picked playlists never get extras. Turn off with
   `curator draft --coverage off`.
 - **Start over** (`curator start-over`): backs up everything, removes the playlists this app
@@ -252,6 +253,7 @@ curator tags songs [--playlist "Name"]   # every song with its descriptors
 curator tags set "tag" vibe|genre|era|ignore|default
 curator draft --coverage on|off   # every song in at least one playlist (default on)
 curator draft --style inclusive|balanced|strict   # how generous playlists are (saved)
+curator describe "new words" --redefine "Name"   # replace a playlist's description
 curator identities dedupe   # retire playlists created twice under the same name
 curator sync prune          # remove from Spotify the app-made copies of retired playlists
 curator start-over          # backup, remove the app's playlists from Spotify, wipe definitions
@@ -270,7 +272,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 240 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
+pytest            # 242 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
 ruff check . && ruff format --check .
 ```
 

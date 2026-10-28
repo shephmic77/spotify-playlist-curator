@@ -314,3 +314,30 @@ def test_a_name_can_only_be_created_once_and_duplicates_can_be_fixed(db, lib):
     roles = db.conn.execute("SELECT role FROM identity_examples WHERE identity_id=1").fetchall()
     assert [r[0] for r in roles] == ["essential"]  # your marks move to the kept one
     assert idn.retire_duplicates(db) == []
+
+
+def test_coverage_tries_but_never_forces_a_song_you_removed(db, lib):
+    chill = idn.create_identity(db, "Chill")
+    idn.edit_identity(db, chill.identity_id, add_tags={"chill": 1.0})
+    funky = idn.create_identity(db, "Funky")
+    idn.edit_identity(db, funky.identity_id, add_tags={"funky": 1.0, "groovy": 1.0})
+    _res, d = _drafts(db, lib)
+    assert "spotify:track:odd" in _uris(db, d["Funky"])  # a weak fit, placed
+    # you removed it from Chill (where it never was): it must not be forced into Funky either
+    fb.decide_uri(db, idn.get_identity(db, "Chill"), "spotify:track:odd", "reject")
+    _res, d = _drafts(db, lib)
+    assert "spotify:track:odd" not in _uris(db, d["Funky"]) | _uris(db, d["Chill"])
+
+
+def test_redefine_replaces_words_but_keeps_your_decisions(db, lib):
+    r1 = ds.translate("chill, mellow", engine="offline")
+    iid = ds.apply_recipe(db, r1, create="Groove")
+    fb.decide_uri(db, idn.get_identity(db, iid), "spotify:track:chill1", "reject")
+    r2 = ds.translate("upbeat, groovy, head bobbing, not slow, not calm", engine="offline")
+    ds.apply_recipe(db, r2, apply_to="Groove", replace=True)
+    g = idn.get_identity(db, "Groove")
+    assert "groovy" in g.rules["tags"] and "mellow" not in g.rules["tags"]
+    assert {"slow", "calm"} <= set(g.rules["avoid_tags"])
+    assert g.concept.startswith("upbeat")
+    decisions = {d["uri"]: d["decision"] for d in fb.decisions_for(db, iid)}
+    assert decisions["spotify:track:chill1"] == "reject"

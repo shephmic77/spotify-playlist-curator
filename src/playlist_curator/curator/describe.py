@@ -469,13 +469,15 @@ def translate(
     # every vibe, genre or era word you typed counts, even outside the built-in situations
     negated = " ".join(m.group(1) for m in _NEGATION.finditer(text.lower()))
     unwanted = set(vibes.words_in(negated)) | set(vibes.labels_in(negated))
-    wanted = {**vibes.labels_in(text), **vibes.words_in(text)}
+    # what you typed counts fully; preset situations only fill in around it
+    wanted = {**vibes.labels_in(text, 1.0), **vibes.words_in(text, 1.0)}
     for word, w in wanted.items():
         if word in unwanted:
             continue
         recipe.tags[word] = max(recipe.tags.get(word, 0.0), w)
         for adj, f in vibes.SOUND_OF.get(word, {}).items():  # "funk" also means funky
-            recipe.tags.setdefault(adj, round(vibes.SOUND_GENRE_WEIGHT * f * w, 2))
+            implied = round(vibes.SOUND_GENRE_WEIGHT * f * w, 2)
+            recipe.tags[adj] = max(recipe.tags.get(adj, 0.0), implied)
     # never avoid something you asked for ("drums and bass" vs a preset avoiding dubstep)
     recipe.avoid = [a for a in recipe.avoid if a not in wanted or a in unwanted]
     recipe.tags = {t: w for t, w in recipe.tags.items() if t not in recipe.avoid}
@@ -631,8 +633,12 @@ def apply_recipe(
     apply_to: str | None = None,
     example_uris: list[str] | None = None,
     kind: str = "mood",
+    replace: bool = False,
 ) -> int:
-    """Create a playlist from a recipe, or merge it into an existing one. Returns its id."""
+    """Create a playlist from a recipe, or merge it into an existing one. Returns its id.
+
+    ``replace`` (redefine): the recipe replaces the playlist's words, avoided words and years
+    instead of adding to them. Your example songs and keep / reject decisions are kept."""
     from playlist_curator.curator import identities as idn
     from playlist_curator.storage.database import utcnow
 
@@ -642,12 +648,16 @@ def apply_recipe(
         ident = idn.get_identity(db, apply_to)
     else:
         raise ValueError("pass create or apply_to")
+    old = ident.rules
     idn.edit_identity(
         db,
         ident.identity_id,
+        concept=recipe.text if replace else None,
+        remove_tags=list(old.get("tags") or {}) if replace else None,
+        unavoid_tags=list(old.get("avoid_tags") or []) if replace else None,
         add_tags=recipe.tags,
         avoid_tags=recipe.avoid,
-        years=recipe.years if recipe.years else "keep",
+        years=recipe.years if (recipe.years or replace) else "keep",
     )
     now = utcnow()
     db.conn.executemany(

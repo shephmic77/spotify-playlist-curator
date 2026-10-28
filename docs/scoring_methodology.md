@@ -153,7 +153,9 @@ and years respected). They're recomputed each draft and never stored, so your ow
 decisions always take precedence. They give the playlist an adaptive bar and "sounds like"
 similarity instead of the default threshold.
 
-**Coverage** (default on, `draft --coverage`): after all playlists are scored, every song that
+**Coverage** (default on, `draft --coverage`; softened 2026-10-24 at the owner's request: it
+tries, it doesn't force). Leftovers are only placed when they score at least half the target
+playlist's bar, and a song rejected in any playlist is never placed as a weak fit anywhere. after all playlists are scored, every song that
 cleared no bar is placed in the auto-maintained playlist where it **ranks highest among that playlist's own
 scored songs** (percentile; +0.05 for the playlist it was in last draft, for stability), with
 the reason "closest match (weak fit)". Ranking instead of raw score stops a broad playlist with

@@ -89,21 +89,22 @@ def cmd_describe(settings: Settings, args: argparse.Namespace) -> int:
         if recipe.years:
             print(f"  preferred years: {recipe.years[0]}–{recipe.years[1]}")
 
-        if args.create or args.apply:
+        if args.create or args.apply or args.redefine:
             try:
                 iid = ds.apply_recipe(
                     db,
                     recipe,
                     create=args.create,
-                    apply_to=args.apply,
+                    apply_to=args.apply or args.redefine,
                     example_uris=example_uris,
                     kind=args.kind,
+                    replace=bool(args.redefine),
                 )
             except (LookupError, ValueError) as exc:
                 print(exc, file=sys.stderr)
                 return 1
             ident = idn.get_identity(db, iid)
-            verb = "Created" if args.create else "Updated"
+            verb = "Created" if args.create else ("Redefined" if args.redefine else "Updated")
             print(
                 f"\n{verb} playlist #{ident.identity_id} '{ident.name}'. "
                 "Run `curator draft` to fill it."
@@ -415,6 +416,11 @@ def register(sub: Any) -> None:
     target = p.add_mutually_exclusive_group()
     target.add_argument("--create", metavar="NAME", help="create a new playlist from this")
     target.add_argument("--apply", metavar="NAME", help="add this to an existing playlist")
+    target.add_argument(
+        "--redefine",
+        metavar="NAME",
+        help="replace an existing playlist's description (keeps your examples and decisions)",
+    )
     p.add_argument("--kind", choices=it.KINDS, default="mood")
     p.set_defaults(func=cmd_describe)
 

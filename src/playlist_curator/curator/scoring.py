@@ -68,6 +68,7 @@ MAX_OVERLAPS_REPORTED = 10
 OVERLAP_REPORT = 0.7
 AUTO_EXAMPLES = 5  # a playlist with fewer examples from you is topped up to this many
 AUTO_MIN_TAG_SCORE = 0.2  # an automatic example must match the description at least this well
+WEAK_FIT_MIN = 0.5  # a leftover is only placed if it scores at least half that playlist's bar
 STICKY_RANK = (
     0.05  # a weak-fit song stays in last draft's playlist unless another is clearly closer
 )
@@ -529,7 +530,11 @@ def set_coverage(db: Database, on: bool) -> None:
 def place_leftovers(
     lib: Library, drafts: list[PlaylistDraft], previous: dict[int, set[str]]
 ) -> None:
-    """Put every song that cleared no bar into the playlist it comes closest to.
+    """Try to give every song that cleared no bar a home: the playlist it comes closest to.
+
+    Not forced: a song you removed from (rejected in) any playlist is never pushed into
+    another one as filler, and a song that's far from every playlist (under half the bar)
+    stays out.
 
     "Closest" is judged within each playlist: how high the song ranks among all the songs
     that playlist scored (its percentile). A broad playlist with a long word list scores many
@@ -541,13 +546,16 @@ def place_leftovers(
         positive = sorted((s.score, r) for r, s in d.scores.items() if s.score > 0)
         n = len(positive)
         ranks[d.identity.identity_id] = {r: (i + 1) / n for i, (_sc, r) in enumerate(positive)}
+    rejected_anywhere = {r for d in drafts for r in d.excluded}
     for rid in lib.rids:
-        if rid in assigned:
+        if rid in assigned or rid in rejected_anywhere:
             continue
         best: tuple[float, PlaylistDraft, SongScore] | None = None
         for d in auto:
             s = d.scores.get(rid)
             if s is None or s.score <= 0 or rid in d.excluded:
+                continue
+            if s.score < WEAK_FIT_MIN * (d.threshold or 0.0):
                 continue
             rank = ranks[d.identity.identity_id].get(rid, 0.0)
             # tie-break on closeness to the bar; last draft's playlist gets a small edge
