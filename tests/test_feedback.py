@@ -100,7 +100,11 @@ def test_rejections_generalize_to_similar_songs(db, lib):
 def test_stability_keeps_borderline_songs(db, lib, monkeypatch):
     w = idn.get_identity(db, "Workout")
     lib_obj = sc.load_library(db, lib)
-    lowest = min(sc.score_playlist(db, w, lib_obj).include, key=lambda s: s.score)
+    # songs you kept yourself are always in, so look at the lowest of the scored ones
+    scored = [
+        s for s in sc.score_playlist(db, w, lib_obj).include if s.reasons[0] != "your example"
+    ]
+    lowest = min(scored, key=lambda s: s.score)
     # raise the bar just above that song: new songs at its score no longer get in...
     monkeypatch.setattr(sc, "THRESHOLD_MIN", lowest.score + 0.01)
     monkeypatch.setattr(sc, "THRESHOLD_MAX", 1.0)

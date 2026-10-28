@@ -353,3 +353,20 @@ def test_artist_examples_only_bring_their_songs_that_fit(db, lib):
     fit = ds.songs_that_fit(uris, recipe, db, lib)
     assert "spotify:track:rap1" in fit and "spotify:track:chill1" not in fit
     assert rec  # sanity
+
+
+def test_a_genre_label_alone_doesnt_make_an_artist_song_fit(db, lib):
+    recipe = ds.translate("hip hop, aggressive", engine="offline")
+    # Lavender Buds carries "hip hop" but nothing aggressive: not "their songs like this"
+    fit = ds.songs_that_fit(["spotify:track:lav", "spotify:track:rap1"], recipe, db, lib)
+    assert fit == ["spotify:track:rap1"]
+
+
+def test_your_named_examples_are_always_in(db, lib):
+    ident = idn.create_identity(db, "Picky")
+    idn.edit_identity(db, ident.identity_id, add_tags={"aggressive": 1.0})
+    _example(db, ident, "spotify:track:chill1")  # an example that doesn't match the words
+    _res, d = _drafts(db, lib, style="strict", coverage=False)
+    assert "spotify:track:chill1" in _uris(db, d["Picky"])
+    why = next(s for s in d["Picky"].include if s.reasons[0] == "your example")
+    assert why

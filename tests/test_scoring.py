@@ -147,7 +147,8 @@ def test_broad_definitions_are_capped(db, lib):
     db.conn.executemany(  # examples from four different sounds -> a very low natural bar
         "INSERT INTO identity_examples VALUES (?,?,?,?,?)",
         [
-            (broad.identity_id, f"spotify:track:{g}{i}", "reference", "user", now)
+            # examples carried over from old playlists ("seed"): no free pass, so the cap applies
+            (broad.identity_id, f"spotify:track:{g}{i}", "reference", "seed", now)
             for g in ("chill", "gym", "jazz", "rap")
             for i in range(5)
         ],

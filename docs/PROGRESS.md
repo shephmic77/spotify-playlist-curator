@@ -3,7 +3,7 @@
 What was tried, what was learned, and the rules in force now. Newest first. For how to run
 the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.md).
 
-## Current rules (v1.5.2, 2026-10-28)
+## Current rules (v1.5.3, 2026-10-28)
 
 - **One playlist at a time, very selective.** The owner defines each playlist with a name,
   a description in his own words, and example songs or artists. Defaults: **strict** style
@@ -14,7 +14,8 @@ the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.
   playlist can *require* a genre family (e.g. must be tagged rock / alternative rock / grunge /
   post-grunge).
 - **Artist examples mean "their songs that fit"**: `--like "Radiohead"` brings only the
-  Radiohead songs that match the description, not their whole catalogue.
+  Radiohead songs that match the description's sound words, not their whole catalogue.
+- **Songs you name or keep are always in**; the bar decides everything else.
 - **The owner's edits teach the app**: songs removed in Spotify become rejects (never re-added,
   similar songs scored down there); songs added become keeps.
 - Safety rules unchanged (AGENTS.md): only playlists the app created are ever written; Liked
@@ -35,6 +36,14 @@ strict + no filler are the defaults; `start-over` resets drafting settings to th
 
 **Learned:** a word like "quiet" in a description triggers the built-in calm preset (soft,
 mellow; avoid heavy). Describe the core sound; let examples carry the softer side.
+
+**First draft (v1.5.2):** 34 in, 97 in review, scores bunched at 0.45-0.56. Calm Radiohead,
+Coldplay, Snow Patrol, The Fray songs got in, because `--like "Radiohead"` let through every
+song labelled "rock"; meanwhile the core sound (Californication, Can't Stop, 1979, Bullet With
+Butterfly Wings, All My Life, Kryptonite) sat in review, because the strict bar was set from the
+examples' own scores and then raised. **Fixed in v1.5.3:** an artist's song must match the
+description's *sound* words, not just a genre label; songs you name as examples (or keep) are
+always in; `--redefine` with `--like` replaces the old named examples.
 
 ## Iteration 2: 16 broad playlists, every song placed (2026-10-21 to 10-27, v1.1-1.5.0)
 

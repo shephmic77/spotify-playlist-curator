@@ -605,9 +605,14 @@ def resolve_examples(
 def songs_that_fit(
     uris: list[str], recipe: Recipe, db: Any, descriptors: dict[str, Descriptors]
 ) -> list[str]:
-    """Of an artist's songs, the ones that fit this description: they carry at least one of
-    its words (at weight ≥ 0.3, judged by the song's own data) and none of its avoided words
-    strongly. Naming an artist then means "their songs like this", not their whole catalogue."""
+    """Of an artist's songs, the ones that fit this description, judged by the song's own data:
+    at least one of its *sound* words (weight ≥ 0.3) and, if it names genres or eras, one of
+    those too; none of its avoided words strongly. A genre label alone isn't enough ("rock" is
+    on nearly everything). Naming an artist then means "their songs like this", not their
+    whole catalogue."""
+    classes = vibes.TagClasses()
+    sound_words = [t for t in recipe.tags if not classes.is_label(t)]
+    label_words = [t for t in recipe.tags if classes.is_label(t)]
     rec_of = {
         r[0]: r[1] for r in db.conn.execute("SELECT uri, recording_id FROM recording_members")
     }
@@ -615,7 +620,9 @@ def songs_that_fit(
     for u in uris:
         d = descriptors.get(rec_of.get(u, ""))
         sound = d.sound if d else {}
-        if not any(sound.get(t, 0.0) >= 0.3 for t in recipe.tags):
+        if sound_words and not any(sound.get(t, 0.0) >= 0.3 for t in sound_words):
+            continue
+        if label_words and not any(sound.get(t, 0.0) >= 0.3 for t in label_words):
             continue
         if any(sound.get(t, 0.0) >= 0.5 for t in recipe.avoid):
             continue
@@ -681,6 +688,12 @@ def apply_recipe(
         years=recipe.years if (recipe.years or replace) else "keep",
     )
     now = utcnow()
+    if replace and example_uris:  # redefining with new examples replaces the old named ones
+        db.conn.execute(
+            "DELETE FROM identity_examples WHERE identity_id=? AND role='reference' "
+            "AND source='user'",
+            (ident.identity_id,),
+        )
     db.conn.executemany(
         "INSERT OR REPLACE INTO identity_examples VALUES (?,?,?,?,?)",
         [(ident.identity_id, u, "reference", "user", now) for u in example_uris or []],

@@ -213,14 +213,17 @@ def _examples(
     db: Database, identity_id: int, lib: Library, hide: set[str] | None = None
 ) -> dict[str, set[str]]:
     out: dict[str, set[str]] = defaultdict(set)
-    for uri, role in db.conn.execute(
-        "SELECT uri, role FROM identity_examples WHERE identity_id=?", (identity_id,)
+    for uri, role, source in db.conn.execute(
+        "SELECT uri, role, source FROM identity_examples WHERE identity_id=?", (identity_id,)
     ):
         if hide and uri in hide:
             continue
         rid = lib.rec_of_uri.get(uri)
         if rid:
             out[role].add(rid)
+            # examples you named (describe --like) or kept yourself are always in the playlist
+            if role == "reference" and source in ("user", "feedback"):
+                out["yours"].add(rid)
     return out
 
 
@@ -464,6 +467,10 @@ def score_playlist(
             continue
         if rid in essential:
             s.decision, s.reasons = "include", ["you marked this essential", *s.reasons]
+            draft.include.append(s)
+            continue
+        if rid in ex["yours"]:
+            s.decision, s.reasons = "include", ["your example", *s.reasons]
             draft.include.append(s)
             continue
         if s.score >= threshold:
