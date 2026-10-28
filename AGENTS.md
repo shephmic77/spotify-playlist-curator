@@ -91,8 +91,9 @@ Re-verify against docs/spotify_api.md links before adding endpoints.
   tags, genre or era drive matching unless the playlist definition names that genre/era; artist
   tags are only a flagged fallback for songs with no song data. Use `Descriptors.sound` (or
   `vibes.profile`), not `.combined`, for anything that matches songs.
-- **Every song in at least one playlist** (coverage, default on): leftovers go to their closest
-  playlist as weak fits; never where rejected, never into hand-picked playlists.
+- **Selective by default** (owner's decision 2026-10-28, see docs/PROGRESS.md): strict style and
+  coverage off. Coverage, when turned on, only tries (never forces) and never places a song the
+  owner removed anywhere.
 - `DELETE /me/library` also removes Liked Songs given track URIs: only call it through
   `SpotifyClient.remove_playlists_from_library`, which builds playlist URIs from ids itself.
 - Feedback is per playlist and always beats scores. `feedback` / `feedback_log` are user data.

@@ -538,6 +538,8 @@ def start_over(
         for t in WIPED_TABLES:
             counts[t] = db.conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
             db.conn.execute(f"DELETE FROM {t}")
+        # drafting settings go back to the current defaults (strict, no forced filler)
+        db.conn.execute("DELETE FROM meta WHERE key IN ('draft_style', 'draft_coverage')")
     return {"backup": str(path), "removed": removed, "failed": failed, "wiped": counts}
 
 

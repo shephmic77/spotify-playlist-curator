@@ -105,3 +105,13 @@ def test_prune_removes_only_playlists_of_retired_definitions(fake, client, db):
     assert sync.prune_retired(db, client) == {"removed": [], "failed": []}
     # the plan only covers the kept one
     assert [p.name for p in sync.plan(db, client).playlists] == ["Night Drive"]
+
+
+@pytest.mark.usefixtures("setup")
+def test_start_over_resets_drafting_settings_to_the_defaults(fake, client, db, tmp_path):
+    from playlist_curator.curator import scoring as sc
+
+    sc.set_style(db, "inclusive")
+    sc.set_coverage(db, True)
+    sync.start_over(db, client, backup_dir=tmp_path)
+    assert sc.draft_style(db) == "strict" and not sc.coverage_enabled(db)

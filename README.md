@@ -272,13 +272,14 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 243 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
+pytest            # 244 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
 ruff check . && ruff format --check .
 ```
 
 Project conventions for human and AI contributors are in [AGENTS.md](AGENTS.md); picking the
 project up in Claude Code or Codex: [docs/HANDOFF.md](docs/HANDOFF.md).
-Architecture: [docs/architecture.md](docs/architecture.md).
+Architecture: [docs/architecture.md](docs/architecture.md). What was tried and learned so far:
+[docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## Privacy
 

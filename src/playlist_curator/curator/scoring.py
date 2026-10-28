@@ -505,9 +505,12 @@ STYLES: dict[str, dict[str, float]] = {
 STYLE_KEY = "draft_style"
 
 
+DEFAULT_STYLE = "strict"  # owner's choice 2026-10-28: few, very selective playlists
+
+
 def draft_style(db: Database) -> str:
-    s = db.get_meta(STYLE_KEY) or "inclusive"
-    return s if s in STYLES else "inclusive"
+    s = db.get_meta(STYLE_KEY) or DEFAULT_STYLE
+    return s if s in STYLES else DEFAULT_STYLE
 
 
 def set_style(db: Database, style: str) -> None:
@@ -520,7 +523,8 @@ COVERAGE_KEY = "draft_coverage"
 
 
 def coverage_enabled(db: Database) -> bool:
-    return (db.get_meta(COVERAGE_KEY) or "on") == "on"
+    # off by default since 2026-10-28: forcing every song somewhere made playlists too broad
+    return (db.get_meta(COVERAGE_KEY) or "off") == "on"
 
 
 def set_coverage(db: Database, on: bool) -> None:

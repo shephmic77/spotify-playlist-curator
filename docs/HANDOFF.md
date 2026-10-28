@@ -1,7 +1,8 @@
-# Handoff: Spotify Playlist Curator (v1.5.1)
+# Handoff: Spotify Playlist Curator (v1.5.2)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
-Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then the docs it links.
+Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then
+[PROGRESS.md](PROGRESS.md) (what was tried, what was learned, the rules in force now).
 The owner's personal machine details (paths, playlist IDs, current settings) are in
 `data/MY_SETUP.md` on his PC; `data/` is git-ignored, so that file is never on GitHub.
 
@@ -29,8 +30,8 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 243 tests
-pass, `ruff` clean. Version 1.5.1 (last tag `v1.0.0`).
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 244 tests
+pass, `ruff` clean. Version 1.5.2 (last tag `v1.0.0`).
 
 ---
 
@@ -84,6 +85,7 @@ spotify-playlist-curator/
 ├── .gitignore                .env, data/, *.sqlite3, tokens, caches
 ├── docs/
 │   ├── HANDOFF.md            this file
+│   ├── PROGRESS.md           iterations, lessons, current rules (newest first)
 │   ├── project_plan.md       what each phase delivered (history)
 │   ├── architecture.md       module map, data flow, every DB table
 │   ├── spotify_api.md        scopes, endpoints used, Feb-2026 API changes, sources
@@ -123,7 +125,7 @@ spotify-playlist-curator/
 │   ├── cli_sync.py           sync / rollback / local-files
 │   ├── cli_maintain.py       maintain / status / settings / schedule
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    243 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    244 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -240,7 +242,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 243 tests, no network
+pytest                       # 244 tests, no network
 ruff check . && ruff format --check .
 ```
 

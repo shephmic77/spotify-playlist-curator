@@ -443,12 +443,12 @@ def register(sub: Any) -> None:
     p.add_argument(
         "--coverage",
         choices=["on", "off"],
-        help="every song in at least one playlist (default on; saved)",
+        help="try to give every song a home (default off; saved)",
     )
     p.add_argument(
         "--style",
         choices=list(sc.STYLES),
-        help="how generous playlists are: inclusive (default), balanced, strict (saved)",
+        help="how generous playlists are: strict (default), balanced, inclusive (saved)",
     )
     p.set_defaults(func=cmd_draft)
 

@@ -121,6 +121,9 @@ def _example(db, ident, uri, role="reference"):
 
 
 def _drafts(db, lib, **kw):
+    # these tests are about leftover placement and generous bars, so ask for them explicitly
+    kw.setdefault("coverage", True)
+    kw.setdefault("style", "inclusive")
     res = sc.build_drafts(db, descriptors=lib, **kw)
     return res, {d.identity.name: d for d in res.drafts}
 

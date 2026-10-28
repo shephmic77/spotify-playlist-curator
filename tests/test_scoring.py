@@ -163,13 +163,16 @@ def test_broad_definitions_are_capped(db, lib):
 def test_inclusive_playlists_take_in_more_songs(db, lib):
     strict = draft_by_name(sc.build_drafts(db, descriptors=lib, coverage=False, style="strict"))
     balanced = draft_by_name(sc.build_drafts(db, descriptors=lib, coverage=False, style="balanced"))
-    inclusive = draft_by_name(sc.build_drafts(db, descriptors=lib, coverage=False))  # default
+    inclusive = draft_by_name(
+        sc.build_drafts(db, descriptors=lib, coverage=False, style="inclusive")
+    )
     for name in ("Indie chill", "Workout"):
         n = [len(x[name].include) for x in (strict, balanced, inclusive)]
         assert n[0] <= n[1] <= n[2] and n[2] > n[0]
         assert inclusive[name].threshold < balanced[name].threshold
         assert not inclusive[name].review  # borderline songs go in rather than to review
-    sc.set_style(db, "strict")
-    assert sc.draft_style(db) == "strict"
+    assert sc.draft_style(db) == "strict" and not sc.coverage_enabled(db)  # the defaults
+    sc.set_style(db, "inclusive")
+    assert sc.draft_style(db) == "inclusive"
     with pytest.raises(ValueError):
         sc.set_style(db, "loose")
