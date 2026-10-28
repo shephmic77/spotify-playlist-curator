@@ -602,6 +602,27 @@ def resolve_examples(
     return out
 
 
+def songs_that_fit(
+    uris: list[str], recipe: Recipe, db: Any, descriptors: dict[str, Descriptors]
+) -> list[str]:
+    """Of an artist's songs, the ones that fit this description: they carry at least one of
+    its words (at weight ≥ 0.3, judged by the song's own data) and none of its avoided words
+    strongly. Naming an artist then means "their songs like this", not their whole catalogue."""
+    rec_of = {
+        r[0]: r[1] for r in db.conn.execute("SELECT uri, recording_id FROM recording_members")
+    }
+    out = []
+    for u in uris:
+        d = descriptors.get(rec_of.get(u, ""))
+        sound = d.sound if d else {}
+        if not any(sound.get(t, 0.0) >= 0.3 for t in recipe.tags):
+            continue
+        if any(sound.get(t, 0.0) >= 0.5 for t in recipe.avoid):
+            continue
+        out.append(u)
+    return out
+
+
 def example_tags(
     uris: list[str], db: Any, descriptors: dict[str, Descriptors], *, min_support: float = 0.5
 ) -> list[tuple[str, float]]:

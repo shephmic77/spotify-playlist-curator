@@ -63,9 +63,24 @@ def cmd_describe(settings: Settings, args: argparse.Namespace) -> int:
                 if m.kind == "none":
                     print(f"    ✗ {m.query}: not found in your library")
                     continue
-                example_uris += m.uris
-                shown = "; ".join(m.labels[:4]) + (" ..." if len(m.labels) > 4 else "")
-                print(f"    ✓ {m.query} ({m.kind}, {len(m.uris)} song(s)): {shown}")
+                if m.kind == "artist":
+                    # an artist means "their songs that fit this", not every song they made
+                    fit = set(ds.songs_that_fit(m.uris, recipe, db, descriptors))
+                    pairs = [(u, lab) for u, lab in zip(m.uris, m.labels, strict=True) if u in fit]
+                    if not pairs:
+                        print(
+                            f"    ~ {m.query}: none of their {len(m.uris)} song(s) fit the "
+                            "description; name songs instead"
+                        )
+                        continue
+                    note = f"artist, {len(pairs)} of {len(m.uris)} songs fit"
+                    uris, labels = [u for u, _ in pairs], [lab for _, lab in pairs]
+                else:
+                    note = f"{m.kind}, {len(m.uris)} song(s)"
+                    uris, labels = m.uris, m.labels
+                example_uris += uris
+                shown = "; ".join(labels[:4]) + (" ..." if len(labels) > 4 else "")
+                print(f"    ✓ {m.query} ({note}): {shown}")
             shared = ds.example_tags(example_uris, db, descriptors)
             if shared:
                 added = []

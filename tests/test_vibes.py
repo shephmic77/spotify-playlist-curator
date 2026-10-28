@@ -341,3 +341,12 @@ def test_redefine_replaces_words_but_keeps_your_decisions(db, lib):
     assert g.concept.startswith("upbeat")
     decisions = {d["uri"]: d["decision"] for d in fb.decisions_for(db, iid)}
     assert decisions["spotify:track:chill1"] == "reject"
+
+
+def test_artist_examples_only_bring_their_songs_that_fit(db, lib):
+    recipe = ds.translate("rap, aggressive", engine="offline")
+    rec = {r[1]: r[0] for r in db.conn.execute("SELECT recording_id, primary_uri FROM recordings")}
+    uris = ["spotify:track:rap1", "spotify:track:chill1", "spotify:track:lav"]
+    fit = ds.songs_that_fit(uris, recipe, db, lib)
+    assert "spotify:track:rap1" in fit and "spotify:track:chill1" not in fit
+    assert rec  # sanity

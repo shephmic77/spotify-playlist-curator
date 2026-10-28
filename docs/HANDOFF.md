@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.5.0)
+# Handoff: Spotify Playlist Curator (v1.5.1)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then the docs it links.
@@ -29,8 +29,8 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 242 tests
-pass, `ruff` clean. Version 1.5.0 (last tag `v1.0.0`).
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 243 tests
+pass, `ruff` clean. Version 1.5.1 (last tag `v1.0.0`).
 
 ---
 
@@ -123,7 +123,7 @@ spotify-playlist-curator/
 │   ├── cli_sync.py           sync / rollback / local-files
 │   ├── cli_maintain.py       maintain / status / settings / schedule
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    242 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    243 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -240,7 +240,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 242 tests, no network
+pytest                       # 243 tests, no network
 ruff check . && ruff format --check .
 ```
 
@@ -315,6 +315,15 @@ review what his edits taught the app (`curator stats --evaluate`, `curator decis
 Aquatic Ambiance, Yesterday, My Way, Hide, Strangers in the Night, Mr. Sandman). v1.5.0: coverage
 softened (tries, never forces; removed songs aren't pushed elsewhere), `describe --redefine`,
 words like "head bobbing" and "lost in the groove" understood.
+
+**2026-10-28: starting over again, one playlist at a time.** The owner found broad playlists
+and the every-song rule wrong: now **coverage off, style strict**, very selective playlists
+built one by one from his examples. First: **"2000 Rock"**: 90s-2010s rock centred on the 2000s
+(fewer 90s and 2010s), grunge / alternative / post-grunge; rough and rocky but can turn more
+peaceful (carefully, RHCP / Smashing Pumpkins style). Examples: Nirvana, Smashing Pumpkins,
+Red Hot Chili Peppers, Semi-Charmed Life, Mr. Jones, Radiohead, Creed, Foo Fighters. v1.5.1:
+artist examples only bring that artist's songs that fit the description
+(`describe.songs_that_fit`); "post-grunge" and "dynamic" understood.
 
 Library: 1,248 recordings, 31 old playlists, 5 local files. Maintenance stays scheduled daily
 09:00 with auto-apply on; with no playlists defined it changes nothing, and it never creates
