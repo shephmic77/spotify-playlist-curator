@@ -447,7 +447,11 @@ def score_playlist(
     tagged = sorted((s.score for s in scores.values() if s.score > 0), reverse=True)
     n_tagged = sum(1 for r in lib.rids if lib.vectors[r])
     st = STYLES.get(style, STYLES["balanced"])
-    threshold = min(THRESHOLD_MAX, max(THRESHOLD_MIN * st["bar"], threshold * st["bar"]))
+    # your per-playlist adjustment ("bar" in the definition: 0.93 = 7% easier to get in)
+    bar = st["bar"] * float(rules.get("bar") or 1.0)
+    threshold = min(THRESHOLD_MAX, max(THRESHOLD_MIN * bar, threshold * bar))
+    if rules.get("bar") and float(rules["bar"]) != 1.0:
+        draft.notes.append(f"bar adjusted ×{float(rules['bar']):g} for this playlist")
     share = st["share"]
     cap_rank = int(share * n_tagged)
     if cap_rank and len(tagged) > cap_rank and tagged[cap_rank] >= threshold:

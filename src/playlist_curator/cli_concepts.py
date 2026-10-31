@@ -285,6 +285,7 @@ def cmd_identities_edit(settings: Settings, args: argparse.Namespace) -> int:
                 unrequire_tags=args.unrequire_tag,
                 years=idn.parse_years(args.years) if args.years is not None else "keep",
                 auto_maintain=args.auto,
+                bar=args.bar,
             )
         except (LookupError, ValueError) as exc:
             print(exc, file=sys.stderr)
@@ -401,6 +402,12 @@ def register(sub: Any) -> None:
     )
     p.add_argument("--unrequire-tag", action="append", metavar="TAG")
     p.add_argument("--years", metavar="FROM-TO|none")
+    p.add_argument(
+        "--bar",
+        type=float,
+        metavar="X",
+        help="this playlist's bar: below 1 lets in more (0.93 = 7%% easier), above 1 fewer",
+    )
     auto = p.add_mutually_exclusive_group()
     auto.add_argument(
         "--auto",

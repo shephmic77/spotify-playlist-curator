@@ -177,3 +177,17 @@ def test_inclusive_playlists_take_in_more_songs(db, lib):
     assert sc.draft_style(db) == "inclusive"
     with pytest.raises(ValueError):
         sc.set_style(db, "loose")
+
+
+def test_a_playlist_can_lower_or_raise_its_own_bar(db, lib):
+    base = draft_by_name(sc.build_drafts(db, descriptors=lib, coverage=False, style="strict"))
+    w = idn.get_identity(db, "Workout")
+    idn.edit_identity(db, w.identity_id, bar=0.85)
+    easier = draft_by_name(sc.build_drafts(db, descriptors=lib, coverage=False, style="strict"))
+    assert easier["Workout"].threshold < base["Workout"].threshold
+    assert len(easier["Workout"].include) >= len(base["Workout"].include)
+    assert any("bar adjusted" in n for n in easier["Workout"].notes)
+    # other playlists unchanged
+    assert easier["Indie chill"].threshold == base["Indie chill"].threshold
+    with pytest.raises(ValueError):
+        idn.edit_identity(db, w.identity_id, bar=3)

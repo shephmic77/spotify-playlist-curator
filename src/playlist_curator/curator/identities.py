@@ -96,6 +96,7 @@ def edit_identity(
     unrequire_tags: list[str] | None = None,
     years: list[int] | str | None = "keep",
     auto_maintain: bool | None = None,
+    bar: float | None = None,
 ) -> Identity:
     ident = get_identity(db, ref)
     rules = dict(ident.rules)
@@ -117,6 +118,10 @@ def edit_identity(
     required = [t for t in rules.get("require_tags") or [] if t not in set(norm(unrequire_tags))]
     required += [t for t in norm(require_tags) if t not in required]
     rules["tags"], rules["avoid_tags"], rules["require_tags"] = tags, avoid, required
+    if bar is not None:
+        if not 0.5 <= bar <= 1.5:
+            raise ValueError("bar must be between 0.5 (much easier) and 1.5 (much harder)")
+        rules["bar"] = round(bar, 3)
     if years != "keep":
         if years is not None and (len(years) != 2 or years[0] > years[1]):
             raise ValueError("years must be FROM-TO, e.g. 1980-1989")

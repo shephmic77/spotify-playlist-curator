@@ -3,7 +3,7 @@
 What was tried, what was learned, and the rules in force now. Newest first. For how to run
 the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.md).
 
-## Current rules (v1.5.3, 2026-10-28)
+## Current rules (v1.5.4, 2026-10-31)
 
 - **One playlist at a time, very selective.** The owner defines each playlist with a name,
   a description in his own words, and example songs or artists. Defaults: **strict** style
@@ -16,12 +16,14 @@ the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.
 - **Artist examples mean "their songs that fit"**: `--like "Radiohead"` brings only the
   Radiohead songs that match the description's sound words, not their whole catalogue.
 - **Songs you name or keep are always in**; the bar decides everything else.
+- **Each playlist can tune its own bar** (`identities edit NAME --bar 0.93` = 7% easier to get
+  in), without loosening the others.
 - **The owner's edits teach the app**: songs removed in Spotify become rejects (never re-added,
   similar songs scored down there); songs added become keeps.
 - Safety rules unchanged (AGENTS.md): only playlists the app created are ever written; Liked
   Songs and original playlists never touched; nothing from the library is sent to an AI.
 
-## Iteration 3: selective, one by one (2026-10-28, v1.5.1-1.5.2)
+## Iteration 3: selective, one by one (2026-10-28, v1.5.1-1.5.4)
 
 **Decision:** "Them being very broad and having to use every song at least once was dumb."
 Scrap everything again; build playlists one at a time, very selectively.
@@ -33,6 +35,12 @@ Chili Peppers, Semi-Charmed Life, Mr. Jones, Radiohead, Creed, Foo Fighters.
 
 **Built:** artist examples filtered to fitting songs; "post-grunge", "dynamic" understood;
 strict + no filler are the defaults; `start-over` resets drafting settings to the defaults.
+
+**AltRock result (2026-10-31):** synced with 40 songs (balanced style, years 1990-2014, 90s
+×0.7, 2010s ×0.3, must be rock / alternative rock / grunge / post-grunge). The owner: "really
+good"; removed only Monster (Skillet), a personal choice that did fit. Wanted a few more songs
+while staying strict: the bar was 0.43 with 63 songs packed just under it (12 within 0.03), so
+v1.5.4 added a per-playlist bar; AltRock set to ×0.93 (about +12 songs).
 
 **Learned:** a word like "quiet" in a description triggers the built-in calm preset (soft,
 mellow; avoid heavy). Describe the core sound; let examples carry the softer side.
