@@ -49,7 +49,9 @@ def test_describe_preview_then_create_then_draft(env, capsys):
     # a description the dictionary doesn't know still works from examples alone
     assert cli.main(["describe", "my late night stuff", "--like", "chill artist 1"]) == 0
     out = capsys.readouterr().out
-    assert "added from what your examples have in common: indie" in out
+    added = out.split("added from what your examples have in common:")[1].split("\n")[0]
+    assert "relaxed" in added and "mellow" in added
+    assert "indie" not in added  # a genre label is never added on the examples' say-so
 
     assert cli.main(["describe", text, "--like", "chill artist 1", "--create", "Study"]) == 0
     assert "Created playlist" in capsys.readouterr().out

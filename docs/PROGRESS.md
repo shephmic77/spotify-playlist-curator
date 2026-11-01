@@ -3,7 +3,7 @@
 What was tried, what was learned, and the rules in force now. Newest first. For how to run
 the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.md).
 
-## Current rules (v1.5.4, 2026-10-31)
+## Current rules (v1.5.6, 2026-11-01)
 
 - **One playlist at a time, very selective.** The owner defines each playlist with a name,
   a description in his own words, and example songs or artists. Defaults: **strict** style
@@ -15,7 +15,8 @@ the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.
   post-grunge).
 - **Artist examples mean "their songs that fit"**: `--like "Radiohead"` brings only the
   Radiohead songs that match the description's sound words, not their whole catalogue.
-- **Songs you name or keep are always in**; the bar decides everything else.
+- **Songs you name or keep are always in**; the bar decides everything else. *Keep* also
+  means "more like this" (it becomes an example); *essential* just pins a song in.
 - **Each playlist can tune its own bar** (`identities edit NAME --bar 0.93` = 7% easier to get
   in), without loosening the others.
 - **The owner's edits teach the app**: songs removed in Spotify become rejects (never re-added,
@@ -45,6 +46,19 @@ v1.5.4 added a per-playlist bar; AltRock set to ×0.93 (about +12 songs).
 **AltRock tuning (2026-11-01):** bar ×0.93 → 51 songs, synced. Owner: remove all Imagine
 Dragons; add Jerk It Out (Caesars) and The Middle (Jimmy Eat World). v1.5.5 adds
 `feedback NAME reject --artist "Artist"`.
+
+**Lesson (2026-11-01): keep vs essential.** Marking Jerk It Out and The Middle as *keep* made
+them examples, and AltRock jumped 51 → 100 (synced) because ~50 poppier-rock songs now
+"sounded like" an example. To just pin a song in, use *essential* (in for good, not used to
+judge other songs). Keep = "more like this".
+
+**Second playlist, "Yacht Rock" (2026-11-01):** smooth soft rock, a bit upbeat but not
+overdoing it, chill. Examples: Hall & Oates (in the library as "Daryl Hall & John Oates"),
+Steely Dan, Walk of Life, Georgy Porgy, Summer Breeze, What You Won't Do for Love, It Ain't
+Over 'til It's Over (DeBarge's I Like It isn't in the library). First draft pulled in plain
+classic rock (Eagles, Fleetwood Mac, CCR, Tom Petty, Queen) because the examples' shared
+labels "rock" and "classic rock" were added to the definition. **Fixed in v1.5.6:** what
+examples have in common only adds sound words, never genre or era labels.
 
 **Learned:** a word like "quiet" in a description triggers the built-in calm preset (soft,
 mellow; avoid heavy). Describe the core sound; let examples carry the softer side.

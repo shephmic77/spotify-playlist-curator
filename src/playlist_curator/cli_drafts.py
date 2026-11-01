@@ -84,7 +84,11 @@ def cmd_describe(settings: Settings, args: argparse.Namespace) -> int:
             shared = ds.example_tags(example_uris, db, descriptors)
             if shared:
                 added = []
+                classes = load_classes(db)
                 for tag, support in shared:
+                    # only sound words: a genre or era counts only if you typed it
+                    if classes.is_label(tag):
+                        continue
                     if tag not in recipe.tags and tag not in recipe.avoid:
                         recipe.tags[tag] = round(0.8 * support, 2)
                         added.append(f"{tag} ({round(100 * support)}% of examples)")
