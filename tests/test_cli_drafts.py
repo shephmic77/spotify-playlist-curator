@@ -115,3 +115,14 @@ def test_tags_commands(env, capsys):
     assert "sounds:" in capsys.readouterr().out
     assert cli.main(["tags", "set", "indie", "vibe"]) == 0
     assert "now read as: vibe" in capsys.readouterr().out
+
+
+def test_feedback_for_every_song_by_an_artist(env, capsys):
+    assert cli.main(["describe", "chill indie", "--create", "Chill"]) == 0
+    capsys.readouterr()
+    assert cli.main(["feedback", "Chill", "reject", "--artist", "jazz artist 1"]) == 0
+    out = capsys.readouterr().out
+    assert out.count("reject: ") >= 2 and "jazz artist 1" in out.lower()
+    assert cli.main(["feedback", "Chill", "reject", "--artist", "Nobody Here"]) == 1
+    assert "no artist called" in capsys.readouterr().out
+    assert cli.main(["feedback", "Chill", "keep"]) == 1

@@ -42,6 +42,10 @@ good"; removed only Monster (Skillet), a personal choice that did fit. Wanted a 
 while staying strict: the bar was 0.43 with 63 songs packed just under it (12 within 0.03), so
 v1.5.4 added a per-playlist bar; AltRock set to ×0.93 (about +12 songs).
 
+**AltRock tuning (2026-11-01):** bar ×0.93 → 51 songs, synced. Owner: remove all Imagine
+Dragons; add Jerk It Out (Caesars) and The Middle (Jimmy Eat World). v1.5.5 adds
+`feedback NAME reject --artist "Artist"`.
+
 **Learned:** a word like "quiet" in a description triggers the built-in calm preset (soft,
 mellow; avoid heavy). Describe the core sound; let examples carry the softer side.
 

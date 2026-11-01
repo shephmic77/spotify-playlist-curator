@@ -98,7 +98,22 @@ def cmd_feedback(settings: Settings, args: argparse.Namespace) -> int:
         return 1
     with db:
         results = []
-        for song in args.songs:
+        targets: list[str] = list(args.songs or [])
+        for artist in args.artist or []:
+            from playlist_curator.curator import describe as ds
+
+            m = ds.resolve_examples(db, [artist], max_per_artist=500)[0]
+            if m.kind != "artist":
+                results.append(f"! no artist called {artist!r} in your library")
+                continue
+            targets += m.uris  # every song of theirs in your library, by URI
+        if not targets:
+            for line in results:
+                print(line)
+            if not results:
+                print('Give songs ("Title", "Title - Artist") or --artist "Name".', file=sys.stderr)
+            return 1
+        for song in targets:
             try:
                 if args.decision == "undo":
                     r = fb.undo(db, args.playlist, song)
@@ -195,7 +210,13 @@ def register(sub: Any) -> None:
     p = sub.add_parser("feedback", help="keep / reject / essential / uncertain / undo songs")
     p.add_argument("playlist")
     p.add_argument("decision", choices=[*fb.DECISIONS, "undo"])
-    p.add_argument("songs", nargs="+", help='"Title", "Title - Artist", or a Spotify URI')
+    p.add_argument("songs", nargs="*", help='"Title", "Title - Artist", or a Spotify URI')
+    p.add_argument(
+        "--artist",
+        action="append",
+        metavar="NAME",
+        help="apply the decision to every song by this artist in your library",
+    )
     p.set_defaults(func=cmd_feedback)
 
     p = sub.add_parser("decisions", help="your decisions for one playlist")
