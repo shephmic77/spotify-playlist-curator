@@ -3,7 +3,7 @@
 What was tried, what was learned, and the rules in force now. Newest first. For how to run
 the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.md).
 
-## Current rules (v1.5.7, 2026-11-01)
+## Current rules (v1.5.8, 2026-11-01)
 
 - **One playlist at a time, very selective.** The owner defines each playlist with a name,
   a description in his own words, and example songs or artists. Defaults: **strict** style
@@ -60,6 +60,14 @@ Over 'til It's Over (DeBarge's I Like It isn't in the library). First draft pull
 classic rock (Eagles, Fleetwood Mac, CCR, Tom Petty, Queen) because the examples' shared
 labels "rock" and "classic rock" were added to the definition. **Fixed in v1.5.6:** what
 examples have in common only adds sound words, never genre or era labels.
+
+**Yacht Rock second draft (v1.5.6-1.5.8):** 25 songs, mostly 70s soft rock (America, Eagles,
+Fleetwood Mac, Elton John), while the truer yacht rock (Sara Smile, What a Fool Believes,
+Escape, Just the Two of Us, Africa, Lowdown-style songs) sat in review. Cause:
+`--like "Daryl Hall & John Oates"` matched nothing, because duo names were split at "&" and
+each half compared to the full name; broad words (calm, happy, feel-good) also favoured folky
+soft rock. **Fixed in v1.5.8:** full duo names and short forms ("Hall & Oates") match.
+AltRock back to 49 songs after `draft --fresh` (Jerk It Out and The Middle now essential).
 
 **Learned:** a word like "quiet" in a description triggers the built-in calm preset (soft,
 mellow; avoid heavy). Describe the core sound; let examples carry the softer side.

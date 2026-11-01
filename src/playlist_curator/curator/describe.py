@@ -543,6 +543,41 @@ def _split_artists(name: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()] or [name]
 
 
+def _artist_by_words(recs: list, query: str) -> list:
+    """Short forms of a duo's name: "Hall & Oates" finds "Daryl Hall & John Oates" (every word
+    of the query, ignoring "&" / "and" / "the", appears in the artist's name). Two or more
+    words needed, so a song title isn't mistaken for an artist."""
+    from playlist_curator.crate.deduplication import normalize_artist
+
+    words = [w for w in re.findall(r"[a-z0-9']+", normalize_artist(query)) if w not in _JOINERS]
+    if len(words) < 2:
+        return []
+    hits = []
+    for u, t, a, _ in recs:
+        for x in a:
+            have = set(re.findall(r"[a-z0-9']+", normalize_artist(x)))
+            if all(w in have for w in words):
+                hits.append((u, t, a))
+                break
+    return hits
+
+
+_JOINERS = {"and", "the", "n", "x"}
+
+
+def _title_hits(recs: list, query: str) -> list:
+    """Songs whose title matches exactly, then by prefix, then loosely (typos)."""
+    qt = _compact(query)
+    if not qt:
+        return []
+    exact = [(u, t, a) for u, t, a, c in recs if c == qt]
+    prefix = [(u, t, a) for u, t, a, c in recs if len(qt) >= 4 and c.startswith(qt)]
+    if exact or prefix:
+        return exact or prefix
+    names = {c: (u, t, a) for u, t, a, c in recs}
+    return [names[c] for c in difflib.get_close_matches(qt, list(names), n=3, cutoff=0.85)]
+
+
 def _compact(text: str) -> str:
     from playlist_curator.crate.deduplication import parse_title
 
@@ -567,12 +602,14 @@ def resolve_examples(
     ]
     out = []
     for q in queries:
-        qa, qt = normalize_artist(q), _compact(q)
+        qa = normalize_artist(q)
         by_artist = [
             (u, t, a)
             for u, t, a, _ in recs
-            if any(normalize_artist(n) == qa for x in a for n in _split_artists(x))
+            if any(normalize_artist(n) == qa for x in a for n in [x, *_split_artists(x)])
         ]
+        if not by_artist and not _title_hits(recs, q):
+            by_artist = _artist_by_words(recs, q)
         if by_artist:
             by_artist = sorted(by_artist, key=lambda x: x[1].lower())[:max_per_artist]
             out.append(
@@ -584,13 +621,7 @@ def resolve_examples(
                 )
             )
             continue
-        exact = [(u, t, a) for u, t, a, c in recs if qt and c == qt]
-        prefix = [(u, t, a) for u, t, a, c in recs if len(qt) >= 4 and c.startswith(qt)]
-        fuzzy: list = []
-        if not exact and not prefix and qt:
-            names = {c: (u, t, a) for u, t, a, c in recs}
-            fuzzy = [names[c] for c in difflib.get_close_matches(qt, list(names), n=3, cutoff=0.85)]
-        hits = exact or prefix or fuzzy
+        hits = _title_hits(recs, q)
         out.append(
             ExampleMatch(
                 q,

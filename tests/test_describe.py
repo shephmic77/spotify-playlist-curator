@@ -115,6 +115,29 @@ def test_resolve_examples_by_artist_and_fuzzy_title(db):
     assert ds.example_tags(m["Nujabes"].uris, db, desc) == []
 
 
+def test_resolve_examples_duo_names(db):
+    build_library(db)
+    add_playlist(
+        db,
+        "pl_d",
+        "D",
+        [
+            ("spotify:track:sara", "Sara Smile", "Daryl Hall & John Oates", 1975),
+            ("spotify:track:maneater", "Maneater", "Daryl Hall & John Oates", 1982),
+            ("spotify:track:walk", "Walk of Life", "Dire Straits", 1985),
+        ],
+    )
+    m = {
+        x.query: x
+        for x in ds.resolve_examples(
+            db, ["Daryl Hall & John Oates", "Hall & Oates", "John Oates", "Walk of Life"]
+        )
+    }
+    for q in ("Daryl Hall & John Oates", "Hall & Oates", "John Oates"):
+        assert m[q].kind == "artist" and len(m[q].uris) == 2, q
+    assert m["Walk of Life"].kind == "song"  # a title is never read as an artist
+
+
 def test_example_tags_and_grounding(db):
     desc = build_library(db)
     uris = [f"spotify:track:chill{i}" for i in range(5)]
