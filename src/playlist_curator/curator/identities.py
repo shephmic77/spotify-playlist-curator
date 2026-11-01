@@ -97,6 +97,7 @@ def edit_identity(
     years: list[int] | str | None = "keep",
     auto_maintain: bool | None = None,
     bar: float | None = None,
+    order: str | None = None,
 ) -> Identity:
     ident = get_identity(db, ref)
     rules = dict(ident.rules)
@@ -122,6 +123,10 @@ def edit_identity(
         if not 0.5 <= bar <= 1.5:
             raise ValueError("bar must be between 0.5 (much easier) and 1.5 (much harder)")
         rules["bar"] = round(bar, 3)
+    if order is not None:
+        if order not in ("alpha", "none"):
+            raise ValueError("order must be alpha (artist, then song A-Z) or none")
+        rules["order"] = order
     if years != "keep":
         if years is not None and (len(years) != 2 or years[0] > years[1]):
             raise ValueError("years must be FROM-TO, e.g. 1980-1989")

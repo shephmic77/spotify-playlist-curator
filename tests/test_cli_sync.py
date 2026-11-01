@@ -69,3 +69,49 @@ def test_preview_then_apply_with_confirmation(env, fake, capsys, monkeypatch):
     assert "Restored 'Night Drive'" in capsys.readouterr().out
     assert cli.main(["sync", "release", "Night Drive"]) == 0
     assert cli.main(["sync", "managed"]) == 0
+
+
+WRITE = "user-library-read playlist-read-private playlist-modify-private playlist-modify-public"
+
+
+def test_cover_preview_needs_permission_and_only_touches_app_playlists(env, fake, capsys):
+    save_tokens(env, WRITE)
+    assert cli.main(["sync", "--apply", "--yes"]) == 0
+    capsys.readouterr()
+    assert not any(p.endswith("/images") for _, p, _ in fake.write_bodies)  # old login: skipped
+
+    assert cli.main(["sync", "cover", "Night Drive", "--preview"]) == 0
+    assert (env / "data" / "covers" / "Night_Drive.jpg").stat().st_size > 1000
+    assert not any(p.endswith("/images") for _, p, _ in fake.write_bodies)
+
+    assert cli.main(["sync", "cover", "Night Drive", "--yes"]) == 1
+    assert "one more permission" in capsys.readouterr().err
+
+    save_tokens(env, WRITE + " ugc-image-upload")
+    assert cli.main(["sync", "cover", "--all", "--yes"]) == 0
+    puts = [p for m, p, _ in fake.write_bodies if p.endswith("/images")]
+    assert len(puts) == 1 and puts[0].startswith("/playlists/pl_new")
+    sid = puts[0].split("/")[2]
+    import base64
+
+    assert base64.b64decode(fake.playlist(sid)["cover_b64"])[:2] == b"\xff\xd8"  # a JPEG
+
+
+def test_own_image_is_cropped_square(env, fake, capsys, tmp_path):
+    from PIL import Image
+
+    from playlist_curator import covers
+
+    pic = tmp_path / "wide.png"
+    Image.new("RGB", (1600, 900), (10, 200, 30)).save(pic)
+    img = covers.from_file(pic)
+    assert img.size == (640, 640)
+    assert cli.main(["sync", "cover", "Night Drive", "--image", str(pic), "--preview"]) == 0
+    assert "your image" in capsys.readouterr().out
+
+
+def test_new_playlists_get_a_cover_when_permission_is_there(env, fake, capsys):
+    save_tokens(env, WRITE + " ugc-image-upload")
+    assert cli.main(["sync", "--apply", "--yes"]) == 0
+    assert "cover set for 'Night Drive'" in capsys.readouterr().out
+    assert sum(p.endswith("/images") for _, p, _ in fake.write_bodies) == 1

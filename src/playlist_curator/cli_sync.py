@@ -6,12 +6,13 @@ import argparse
 import sys
 from typing import Any
 
-from playlist_curator.config import WRITE_SCOPES, Settings
+from playlist_curator import covers
+from playlist_curator.config import COVER_SCOPES, WRITE_SCOPES, Settings
 from playlist_curator.crate import deduplication as dedup
 from playlist_curator.curator import identities as idn
 from playlist_curator.spotify import sync
 from playlist_curator.spotify.auth import TokenManager, TokenStore
-from playlist_curator.spotify.client import SpotifyClient
+from playlist_curator.spotify.client import SpotifyAPIError, SpotifyClient
 from playlist_curator.storage.database import Database
 
 
@@ -60,6 +61,8 @@ def _print_plan(p: sync.SyncPlan, *, songs: bool, label: Any = str) -> None:
         print(f"  {pp.name[:28]:<28} {head:<14} {counts}")
         if pp.rename:
             print(f"      rename to '{pp.rename}'")
+        if pp.reorder:
+            print("      put in A-Z order (artist, then song)")
         if pp.keep_manual_adds:
             print(f"      you added {len(pp.keep_manual_adds)} song(s) in Spotify: kept")
         if pp.respect_manual_removes:
@@ -117,6 +120,15 @@ def cmd_sync(settings: Settings, args: argparse.Namespace) -> int:
                 print("Cancelled. Nothing was written.")
                 return 1
         res = sync.apply(db, client, p, progress=print)
+        created = [a for a in res.applied if a["action"] == "create"]
+        if created and _can_cover(settings, quiet=True):
+            idents = {i.name: i for i in idn.list_identities(db)}
+            for a in created:
+                ident = idents.get(a["playlist"])
+                try:
+                    _set_cover(db, client, settings, a["playlist"], a["spotify_id"], ident)
+                except Exception as exc:  # a cover is cosmetic; never fail the sync over it
+                    print(f"  (cover for {a['playlist']} not set: {exc})")
     print(f"\nSync {res.status}: {len(res.applied)} playlist(s) written and verified.")
     for e in res.errors:
         print(f"  ! {e['playlist']}: {e['error']}")
@@ -128,6 +140,98 @@ def cmd_sync(settings: Settings, args: argparse.Namespace) -> int:
             "curator sync local-files"
         )
     return 0 if res.status == "ok" else 2
+
+
+def _can_cover(settings: Settings, *, quiet: bool = False) -> bool:
+    tokens = TokenStore(settings.token_path).load()
+    ok = tokens is not None and (not tokens.scope or set(COVER_SCOPES) <= tokens.scopes)
+    if not ok and not quiet:
+        print(
+            "Setting covers needs one more permission. Run `curator auth login` once and "
+            "approve it (upload images to playlists the app makes).",
+            file=sys.stderr,
+        )
+    return ok
+
+
+def _cover_image(settings: Settings, name: str, ident: Any, image: str | None) -> tuple[bytes, Any]:
+    img = covers.from_file(image) if image else covers.generate(name, ident.concept or "")
+    jpeg = covers.to_jpeg(img)
+    folder = settings.data_dir / "covers"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{covers.safe_filename(name)}.jpg"
+    path.write_bytes(jpeg)
+    return jpeg, path
+
+
+def _set_cover(
+    db: Database, client: SpotifyClient, settings: Settings, name: str, sid: str, ident: Any
+) -> None:
+    jpeg, path = _cover_image(settings, name, ident, None)
+    sync._guard(db, sid)
+    client.upload_cover(sid, jpeg)
+    print(f"  cover set for '{name}' ({path})")
+
+
+def cmd_cover(settings: Settings, args: argparse.Namespace) -> int:
+    db = _db(settings)
+    if db is None:
+        return 1
+    with db:
+        reg = sync.managed(db)
+        idents = {i.identity_id: i for i in idn.list_identities(db)}
+        names = [idents[k].name for k in reg if k in idents] if args.all else args.names
+        if not names:
+            print('Name a playlist (curator sync cover "AltRock") or use --all.', file=sys.stderr)
+            return 1
+        if args.image and len(names) != 1:
+            print("--image sets one playlist's cover; name just one.", file=sys.stderr)
+            return 1
+        todo = []
+        for name in names:
+            try:
+                ident = idn.get_identity(db, name)
+            except LookupError as exc:
+                print(exc, file=sys.stderr)
+                return 1
+            entry = reg.get(ident.identity_id)
+            try:
+                jpeg, path = _cover_image(settings, ident.name, ident, args.image)
+            except (OSError, ValueError) as exc:
+                print(f"{ident.name}: couldn't use that image ({exc})", file=sys.stderr)
+                return 1
+            theme = (
+                "your image"
+                if args.image
+                else covers.pick_theme(ident.name, ident.concept or "").name
+            )
+            print(f"  {ident.name:<28} {theme:<12} saved to {path}")
+            if entry is None:
+                print("      not in Spotify yet: `curator sync --apply` gives it this cover")
+                continue
+            todo.append((ident.name, entry["spotify_id"], jpeg))
+        if args.preview or not todo:
+            print("\nPreview only: open the saved file(s) to look. Nothing was sent to Spotify.")
+            return 0
+        if not _can_cover(settings):
+            return 1
+        if not args.yes:
+            ask = f"\nSet the cover of {len(todo)} playlist(s) in Spotify? Type 'yes' to continue: "
+            if input(ask).strip().lower() != "yes":
+                print("Cancelled. Nothing was written.")
+                return 1
+        client = _client(settings)
+        failed = 0
+        for name, sid, jpeg in todo:
+            try:
+                sync._guard(db, sid)
+                client.upload_cover(sid, jpeg)
+                print(f"  cover set: {name}")
+            except (SpotifyAPIError, sync.NotManaged, ValueError) as exc:
+                failed += 1
+                print(f"  ! {name}: {exc}", file=sys.stderr)
+        print("Spotify can take a minute to show a new cover.")
+    return 0 if not failed else 2
 
 
 def cmd_local_files(settings: Settings, args: argparse.Namespace) -> int:
@@ -317,6 +421,13 @@ def register(sub: Any) -> None:
     ssub.add_parser("managed", help="playlists the app manages in Spotify").set_defaults(
         func=cmd_managed
     )
+    q = ssub.add_parser("cover", help="set a cover image on playlists the app made")
+    q.add_argument("names", nargs="*", help="playlist name(s)")
+    q.add_argument("--all", action="store_true", help="every playlist the app manages")
+    q.add_argument("--image", metavar="FILE", help="use your own picture (cropped square)")
+    q.add_argument("--preview", action="store_true", help="only save the image file to look at")
+    q.add_argument("--yes", action="store_true", help="don't ask for confirmation")
+    q.set_defaults(func=cmd_cover)
     q = ssub.add_parser("history", help="saved states of one playlist")
     q.add_argument("playlist")
     q.set_defaults(func=cmd_history)

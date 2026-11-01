@@ -3,7 +3,7 @@
 What was tried, what was learned, and the rules in force now. Newest first. For how to run
 the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.md).
 
-## Current rules (v1.5.8, 2026-11-01)
+## Current rules (v1.6.0, 2026-11-01)
 
 - **One playlist at a time, very selective.** The owner defines each playlist with a name,
   a description in his own words, and example songs or artists. Defaults: **strict** style
@@ -21,6 +21,9 @@ the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.
   in), without loosening the others.
 - **The owner's edits teach the app**: songs removed in Spotify become rejects (never re-added,
   similar songs scored down there); songs added become keeps.
+- **Playlists are kept A-Z by artist, then song** in Spotify (owner's request 2026-11-01;
+  `--order none` per playlist to opt out). **Covers** are generated from the name and his
+  description (or his own picture) with `curator sync cover`.
 - Safety rules unchanged (AGENTS.md): only playlists the app created are ever written; Liked
   Songs and original playlists never touched; nothing from the library is sent to an AI.
 
@@ -68,6 +71,16 @@ Escape, Just the Two of Us, Africa, Lowdown-style songs) sat in review. Cause:
 each half compared to the full name; broad words (calm, happy, feel-good) also favoured folky
 soft rock. **Fixed in v1.5.8:** full duo names and short forms ("Hall & Oates") match.
 AltRock back to 49 songs after `draft --fresh` (Jerk It Out and The Middle now essential).
+
+**AltRock tightening (2026-11-01):** owner: no mainstream poppy rock; "a mix of Nirvana,
+Linkin Park and Red Hot Chili Peppers". Rejected Coldplay, The Cranberries, Fall Out Boy, Kid
+Cudi, OneRepublic, Two Door Cinema Club and six named songs (Iris, Bitter Sweet Symphony, Seven
+Nation Army ...); avoid tags pop rock, pop, britpop, indie pop, indie rock, electronic,
+experimental, ambient. Result 49 songs: Nirvana, Foo Fighters, Linkin Park, RHCP, Pearl Jam,
+Soundgarden, SOAD. Side effect to watch: most Smashing Pumpkins songs dropped (an avoided tag).
+Yacht Rock bar ×0.9 (56 songs) for him to prune in Spotify.
+
+**v1.6.0 (2026-11-01):** A-Z order (artist, then title) and playlist covers.
 
 **Learned:** a word like "quiet" in a description triggers the built-in calm preset (soft,
 mellow; avoid heavy). Describe the core sound; let examples carry the softer side.

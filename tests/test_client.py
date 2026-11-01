@@ -126,3 +126,17 @@ def test_writes_refuse_local_files(client):
         client.add_items("pl_80s", ["spotify:local:a:b:c:100"])
     with pytest.raises(ValueError):
         client.add_items("pl_80s", ["not-a-uri"])
+
+
+def test_upload_cover_request_shape(fake, client):
+    import base64
+
+    seen = []
+    fake.on_request = lambda r: seen.append(r)
+    client.upload_cover("pl_80s", b"\xff\xd8jpeg-bytes")
+    req = seen[-1]
+    assert req.method == "PUT" and req.url.path == "/v1/playlists/pl_80s/images"
+    assert req.headers["Content-Type"] == "image/jpeg"
+    assert base64.b64decode(req.content) == b"\xff\xd8jpeg-bytes"
+    with pytest.raises(ValueError, match="256 KB"):
+        client.upload_cover("pl_80s", b"x" * 200_000)

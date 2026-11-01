@@ -286,6 +286,7 @@ def cmd_identities_edit(settings: Settings, args: argparse.Namespace) -> int:
                 years=idn.parse_years(args.years) if args.years is not None else "keep",
                 auto_maintain=args.auto,
                 bar=args.bar,
+                order=args.order,
             )
         except (LookupError, ValueError) as exc:
             print(exc, file=sys.stderr)
@@ -407,6 +408,11 @@ def register(sub: Any) -> None:
         type=float,
         metavar="X",
         help="this playlist's bar: below 1 lets in more (0.93 = 7%% easier), above 1 fewer",
+    )
+    p.add_argument(
+        "--order",
+        choices=["alpha", "none"],
+        help="song order in Spotify: alpha = artist, then song A-Z (default); none = leave it",
     )
     auto = p.add_mutually_exclusive_group()
     auto.add_argument(

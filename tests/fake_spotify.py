@@ -231,6 +231,13 @@ class FakeSpotify:
             }
             self.lib["playlists"].append(new)
             return httpx.Response(201, json={k: v for k, v in new.items() if k != "entries"})
+        if m == "PUT" and path.startswith("/playlists/") and path.endswith("/images"):
+            pid = path.split("/")[2]
+            assert request.headers.get("Content-Type") == "image/jpeg"
+            assert len(request.content) <= 256 * 1024
+            self.write_bodies.append((m, path, {"bytes": len(request.content)}))
+            self.playlist(pid)["cover_b64"] = request.content
+            return httpx.Response(202)
         if m == "PUT" and path.startswith("/playlists/"):
             pid = path.split("/")[2]
             body = json.loads(request.content)

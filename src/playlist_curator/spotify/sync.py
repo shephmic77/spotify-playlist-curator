@@ -6,7 +6,9 @@ Safety rules enforced here (and tested):
 - ``plan`` never writes. ``apply`` writes only what the plan shows, and only when you ask.
 - New playlists are **private**.
 - Minimal changes: only the songs that need adding or removing are touched; nothing is
-  re-added if any copy of the same recording is already there; order is left alone.
+  re-added if any copy of the same recording is already there.
+- Order: by default every playlist is kept in alphabetical order (artist, then song title
+  within the artist). A playlist set to ``order: none`` is left in whatever order it has.
 - Before every change the current state is saved (``playlist_snapshots``) so it can be
   rolled back. After writing, the playlist is re-read to confirm the result.
 - Your own edits in Spotify win: a song you added to a managed playlist since the app's last
@@ -55,6 +57,7 @@ class PlaylistPlan:
     keep_manual_adds: list[str] = field(default_factory=list)  # you added these in Spotify
     respect_manual_removes: list[str] = field(default_factory=list)  # you removed these
     local_files: list[str] = field(default_factory=list)  # labels, for manual action
+    reorder: bool = False  # put it in alphabetical order (artist, then title)
     rename: str | None = None
     new_description: str | None = None
     current_count: int = 0
@@ -114,6 +117,32 @@ def _label(db: Database, uri: str) -> str:
     return f"{row['name']} — {artists}" if artists else row["name"]
 
 
+ORDERS = ("alpha", "none")
+DEFAULT_ORDER = "alpha"
+
+
+def order_of(ident: Identity) -> str:
+    return (ident.rules or {}).get("order") or DEFAULT_ORDER
+
+
+def alpha_order(db: Database, uris: list[str]) -> list[str]:
+    """Artist A-Z (ignoring case, accents and a leading "The"), then song title A-Z within the
+    artist. Stable for ties, so duplicates keep their relative order."""
+    from playlist_curator.crate.deduplication import _fold, normalize_artist
+
+    rows = {
+        r["uri"]: (r["name"], json.loads(r["artists_json"]))
+        for r in db.conn.execute("SELECT uri, name, artists_json FROM tracks")
+    }
+
+    def key(u: str) -> tuple[str, str]:
+        name, artists = rows.get(u, (u, []))
+        first = artists[0]["name"] if artists else ""
+        return (normalize_artist(first) or "~", _fold(name))
+
+    return sorted(uris, key=key)
+
+
 def read_playlist_uris(client: SpotifyClient, spotify_id: str) -> list[str]:
     uris = []
     for raw in client.iter_playlist_items(spotify_id):
@@ -171,6 +200,8 @@ def plan(db: Database, client: SpotifyClient | None, *, only: list[str] | None =
                 plans.append(pp)
                 continue
             pp.action, pp.add = "create", list(target)
+            if order_of(ident) == "alpha":
+                pp.add = alpha_order(db, pp.add)
             pp.new_description = description_for(ident)
             plans.append(pp)
             continue
@@ -186,6 +217,8 @@ def plan(db: Database, client: SpotifyClient | None, *, only: list[str] | None =
             if exc.status == 404:
                 pp.note = "deleted in Spotify; it will be re-created"
                 pp.action, pp.spotify_id, pp.add = "create", None, list(target)
+                if order_of(ident) == "alpha":
+                    pp.add = alpha_order(db, pp.add)
                 pp.new_description = description_for(ident)
             else:
                 pp.note = f"couldn't read it: {exc.message}"
@@ -219,7 +252,18 @@ def plan(db: Database, client: SpotifyClient | None, *, only: list[str] | None =
         desc = description_for(ident)
         if desc != (entry["description"] or ""):
             pp.new_description = desc
-        changed = pp.add or pp.remove or pp.rename or pp.new_description
+        if pp.add and order_of(ident) == "alpha":
+            pp.add = alpha_order(db, pp.add)
+        if order_of(ident) == "alpha":
+            gone = set(pp.remove)
+            final = [u for u in current if u not in gone] + pp.add
+            local_inside = any(u.startswith("spotify:local:") for u in final)
+            if alpha_order(db, final) != final:
+                if local_inside:
+                    pp.note = "has local files, so it can't be put in A-Z order by the app"
+                else:
+                    pp.reorder = True
+        changed = pp.add or pp.remove or pp.rename or pp.new_description or pp.reorder
         # your own edits in Spotify still need recording as decisions, even with no writes
         manual = pp.keep_manual_adds or pp.respect_manual_removes
         pp.action = "update" if (changed or manual) else "unchanged"
@@ -319,6 +363,12 @@ def apply(
                     )
             # Verify by reading back
             after = read_playlist_uris(client, sid)
+            if pp.reorder:
+                ordered = alpha_order(db, after)
+                if ordered != after and not any(u.startswith("spotify:local:") for u in after):
+                    say(f"  putting '{pp.name}' in A-Z order (artist, then song) ...")
+                    client.replace_items(sid, ordered)
+                    after = read_playlist_uris(client, sid)
             missing = [u for u in pp.add if u not in after]
             lingering = [u for u in pp.remove if u in after]
             if missing or lingering:
@@ -343,6 +393,7 @@ def apply(
                     "action": pp.action,
                     "added": len(pp.add),
                     "removed": len(pp.remove),
+                    "reordered": pp.reorder,
                     "spotify_id": sid,
                 }
             )

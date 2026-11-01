@@ -51,7 +51,8 @@ the app's own registry. `curator auth login --read-only` keeps the old read-only
 | `POST /me/playlists` | 6 | replaces `POST /users/{id}/playlists`; `public` defaults to true, so we always send `false` |
 | `PUT /playlists/{id}` | 6 | name, description, public |
 | `POST /playlists/{id}/items` | 6 | ≤ 100 URIs per request |
-| `PUT /playlists/{id}/items` | 6 | replace (≤ 100) or reorder; we replace first 100 then append |
+| `PUT /playlists/{id}/items` | 6 | replace (≤ 100) or reorder; we replace first 100 then append (also used to put a playlist in A-Z order) |
+| `PUT /playlists/{id}/images` | 6 | v1.6: cover image, body = base64 JPEG ≤ 256 KB, `Content-Type: image/jpeg`; scope `ugc-image-upload`; app-made playlists only (not listed in the Feb-2026 removals) |
 | `DELETE /playlists/{id}/items` | 6 | body key `items` (was `tracks`), ≤ 100, optional `snapshot_id` |
 
 The write methods exist in `SpotifyClient` and are unit-tested, but nothing calls them yet.

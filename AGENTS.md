@@ -62,6 +62,9 @@ swapped without touching scoring, and so scoring can be tested with fixtures alo
 - Track `popularity`, `available_markets`, `linked_from` are removed/deprecated. `external_ids.isrc` exists.
 - `/me` no longer returns `country`; reads pass `market=from_token`.
 - Redirect URI must use `127.0.0.1`, not `localhost`.
+- Covers: `PUT /playlists/{id}/images`, base64 JPEG ≤ 256 KB, scope `ugc-image-upload` (kept out
+  of `WRITE_SCOPES` so older logins still sync). Draw covers from the playlist name and the
+  owner's description only; never use album artwork or other Spotify content in a cover.
 
 Re-verify against docs/spotify_api.md links before adding endpoints.
 

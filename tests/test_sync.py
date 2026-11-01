@@ -204,3 +204,44 @@ def test_handpicked_and_empty_playlists(fake, client, db, setup):
     assert p["Empty"].action == "skip" and "empty" in p["Empty"].note
     assert sync.plan(db, client, only=["mine"]).playlists[0].name == "Mine"
     assert sync.local_file_actions(db)[0][0] == "Night Drive"
+
+
+def _alpha(db, uris):
+    return sync.alpha_order(db, uris) == list(uris)
+
+
+def test_new_playlist_is_created_in_artist_then_title_order(fake, client, db, setup):
+    res = sync.apply(db, client, sync.plan(db, client))
+    entries = fake.playlist(res.applied[0]["spotify_id"])["entries"]
+    assert len(entries) > 1 and _alpha(db, entries)
+
+
+def test_out_of_order_playlist_is_reordered_and_none_leaves_it(fake, client, db, setup):
+    res = sync.apply(db, client, sync.plan(db, client))
+    sid = res.applied[0]["spotify_id"]
+    fake.playlist(sid)["entries"].reverse()  # you shuffled it in Spotify
+    p = by_name(sync.plan(db, client))["Night Drive"]
+    assert p.action == "update" and p.reorder and not p.add and not p.remove
+    sync.apply(db, client, sync.plan(db, client))
+    assert _alpha(db, fake.playlist(sid)["entries"])
+    assert by_name(sync.plan(db, client))["Night Drive"].action == "unchanged"
+
+    idn.edit_identity(db, "Night Drive", order="none")
+    fake.playlist(sid)["entries"].reverse()
+    sc.build_drafts(db, descriptors=setup)
+    p = by_name(sync.plan(db, client))["Night Drive"]
+    assert not p.reorder and p.action == "unchanged"
+
+
+def test_alpha_order_ignores_the_and_case(db):
+    db.conn.executemany(
+        "INSERT INTO tracks (uri, name, artists_json, first_seen_at, last_seen_at)"
+        " VALUES (?,?,?,'2026-01-01','2026-01-01')",
+        [
+            ("u1", "Yellow", json.dumps([{"name": "Coldplay"}])),
+            ("u2", "Zebra", json.dumps([{"name": "the Beach House"}])),
+            ("u3", "Clocks", json.dumps([{"name": "Coldplay"}])),
+            ("u4", "Alpha", json.dumps([{"name": "ABBA"}])),
+        ],
+    )
+    assert sync.alpha_order(db, ["u1", "u2", "u3", "u4"]) == ["u4", "u2", "u3", "u1"]

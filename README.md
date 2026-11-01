@@ -243,6 +243,8 @@ curator sync managed        # playlists the app created, with links
 curator sync history "Name" | curator rollback "Name" [--to ID]
 curator sync release "Name" # stop syncing a playlist; it stays in Spotify as is
 curator sync local-files    # local files to add to playlists by hand
+curator sync cover "Name" [--image FILE] [--preview] | --all   # cover image (needs a re-login once)
+curator identities edit "Name" --order alpha|none   # A-Z by artist, then song (default alpha)
 curator maintain            # import + tag new + redraft + compare (writes only if auto is on)
 curator maintain status     # settings, schedule, recent runs, what's waiting for you
 curator maintain settings --auto-apply on [--max-changes 10 --max-share 0.25 --max-shrink 0.1]
@@ -275,7 +277,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 250 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
+pytest            # 257 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
 ruff check . && ruff format --check .
 ```
 

@@ -7,11 +7,13 @@ It returns raw JSON; normalization lives in ``playlist_curator.models``.
 Only endpoints verified against the post-February-2026 documentation are used:
 ``GET /me``, ``GET /me/tracks``, ``GET /me/playlists``, ``GET /playlists/{id}``,
 ``GET /playlists/{id}/items``, ``POST /me/playlists``, ``PUT /playlists/{id}``,
-``POST|PUT|DELETE /playlists/{id}/items``. See docs/spotify_api.md.
+``POST|PUT|DELETE /playlists/{id}/items``, ``PUT /playlists/{id}/images``. See
+docs/spotify_api.md.
 """
 
 from __future__ import annotations
 
+import base64
 import logging
 import random
 import re
@@ -112,15 +114,21 @@ class SpotifyClient:
         *,
         params: dict[str, Any] | None = None,
         json: Any = None,
+        content: bytes | None = None,
+        content_type: str | None = None,
     ) -> dict[str, Any]:
         url = self._url(path_or_url)
         refreshed = False
         attempt = 0
         while True:
             headers = {"Authorization": f"Bearer {self.tokens.access_token()}"}
+            if content_type:
+                headers["Content-Type"] = content_type
             try:
                 self.request_count += 1
-                resp = self.http.request(method, url, params=params, json=json, headers=headers)
+                resp = self.http.request(
+                    method, url, params=params, json=json, content=content, headers=headers
+                )
             except httpx.TransportError as exc:
                 if attempt >= self.max_retries:
                     raise SpotifyAPIError(0, method, _redact(url), f"network error: {exc}") from exc
@@ -263,6 +271,16 @@ class SpotifyClient:
             snapshot = self.add_items(playlist_id, rest)
         return snapshot
 
+    def upload_cover(self, playlist_id: str, jpeg: bytes) -> None:
+        """Set a playlist's cover: ``PUT /playlists/{id}/images``, body = the JPEG, base64-encoded
+        (at most 256 KB encoded). Needs the ``ugc-image-upload`` scope."""
+        body = base64.b64encode(jpeg)
+        if len(body) > COVER_MAX_BYTES:
+            raise ValueError(f"cover is {len(body) // 1024} KB encoded; Spotify allows 256 KB")
+        self.request(
+            "PUT", f"/playlists/{playlist_id}/images", content=body, content_type="image/jpeg"
+        )
+
     def remove_playlists_from_library(self, playlist_ids: Iterable[str]) -> None:
         """Remove playlists from your library (Spotify's way of deleting your own playlist).
 
@@ -296,6 +314,7 @@ class SpotifyClient:
         return snapshot
 
 
+COVER_MAX_BYTES = 256 * 1024  # documented maximum for a base64-encoded cover image
 LIBRARY_REMOVE_CHUNK = 40  # documented maximum URIs per DELETE /me/library
 _PLAYLIST_ID = re.compile(r"^[A-Za-z0-9_]+$")
 

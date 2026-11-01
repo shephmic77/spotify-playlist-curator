@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.5.8)
+# Handoff: Spotify Playlist Curator (v1.6.0)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then
@@ -30,8 +30,8 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 250 tests
-pass, `ruff` clean. Version 1.5.8 (last tag `v1.0.0`).
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 257 tests
+pass, `ruff` clean. Version 1.6.0 (last tag `v1.0.0`).
 
 ---
 
@@ -125,7 +125,7 @@ spotify-playlist-curator/
 │   ├── cli_sync.py           sync / rollback / local-files
 │   ├── cli_maintain.py       maintain / status / settings / schedule
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    250 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    257 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -171,8 +171,13 @@ curator maintain ──► all of the above, unattended, within limits
 
 - Writes **only** to playlists in `managed_playlists` (`_guard` raises `NotManaged` otherwise).
 - New playlists created private (`public: false` is sent explicitly; Spotify defaults to true).
-- Diff by recording: never re-adds a song present under another copy; minimal add/remove; order
-  untouched.
+- Diff by recording: never re-adds a song present under another copy; minimal add/remove.
+- Order: every playlist kept A-Z by artist, then song title (`identities edit --order none` to
+  leave a playlist's order alone). Re-sorting is one replace of the whole list after the
+  add/remove; skipped when a playlist contains local files (the API can't write those).
+- Covers (`covers.py`, `curator sync cover`): drawn from the playlist name and his description
+  only (theme picked by word rules), or his own image; new playlists get one automatically when
+  the login has `ugc-image-upload`.
 - Manual Spotify edits since the app's last write win: his adds become `keep`, his removes
   `reject` and are never re-added.
 - Snapshot before and after every change; re-read to verify; `curator rollback "Name"`
@@ -242,7 +247,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 250 tests, no network
+pytest                       # 257 tests, no network
 ruff check . && ruff format --check .
 ```
 
@@ -367,7 +372,9 @@ playlists.
   `POST /me/playlists` to create; no audio features / recommendations for new apps.
 - Paging max 50; writes max 100 URIs per request; `DELETE .../items` body key `items`.
 - Scopes: `user-library-read playlist-read-private playlist-read-collaborative
-  playlist-modify-private playlist-modify-public`.
+  playlist-modify-private playlist-modify-public ugc-image-upload` (the last one, added in
+  v1.6.0 for covers, is optional: sync and maintenance work without it).
+- Covers: `PUT /playlists/{id}/images`, base64 JPEG ≤ 256 KB.
 - Redirect URI must be `127.0.0.1`, not `localhost`.
 
 Details and links: [spotify_api.md](spotify_api.md).

@@ -22,6 +22,9 @@ WRITE_SCOPES: tuple[str, ...] = (
     "playlist-modify-private",
     "playlist-modify-public",
 )
+# Covers for the app's own playlists (PUT /playlists/{id}/images). Kept separate so syncing
+# and maintenance keep working with an older login that lacks it.
+COVER_SCOPES: tuple[str, ...] = ("ugc-image-upload",)
 
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8888/callback"
 DEFAULT_MB_CONTACT = "https://github.com/shephmic77/spotify-playlist-curator"
@@ -36,7 +39,7 @@ class Settings:
     client_id: str
     redirect_uri: str = DEFAULT_REDIRECT_URI
     data_dir: Path = field(default_factory=lambda: Path("data"))
-    scopes: tuple[str, ...] = READ_SCOPES + WRITE_SCOPES
+    scopes: tuple[str, ...] = READ_SCOPES + WRITE_SCOPES + COVER_SCOPES
     log_level: str = "INFO"
     lastfm_api_key: str = ""
     # Optional: lets `curator describe` translate free-form descriptions with Claude.
