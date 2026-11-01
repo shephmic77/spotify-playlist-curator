@@ -148,7 +148,7 @@ def cmd_draft(settings: Settings, args: argparse.Namespace) -> int:
         if not idn.list_identities(db):
             print('No playlists defined yet. Make one: curator describe "..." --create "Name"')
             return 1
-        res = sc.build_drafts(db)
+        res = sc.build_drafts(db, fresh=args.fresh)
         cov = sc.coverage_enabled(db)
         print(f"Style: {sc.draft_style(db)} (change with --style balanced or strict)")
     total = len(res.unassigned) + len({s.recording_id for d in res.drafts for s in d.include})
@@ -453,6 +453,11 @@ def register(sub: Any) -> None:
         "--style",
         choices=list(sc.STYLES),
         help="how generous playlists are: strict (default), balanced, inclusive (saved)",
+    )
+    p.add_argument(
+        "--fresh",
+        action="store_true",
+        help="rebuild from scratch: songs in the last draft get no easier bar to stay",
     )
     p.set_defaults(func=cmd_draft)
 

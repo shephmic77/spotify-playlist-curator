@@ -3,7 +3,7 @@
 What was tried, what was learned, and the rules in force now. Newest first. For how to run
 the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.md).
 
-## Current rules (v1.5.6, 2026-11-01)
+## Current rules (v1.5.7, 2026-11-01)
 
 - **One playlist at a time, very selective.** The owner defines each playlist with a name,
   a description in his own words, and example songs or artists. Defaults: **strict** style
@@ -50,7 +50,8 @@ Dragons; add Jerk It Out (Caesars) and The Middle (Jimmy Eat World). v1.5.5 adds
 **Lesson (2026-11-01): keep vs essential.** Marking Jerk It Out and The Middle as *keep* made
 them examples, and AltRock jumped 51 → 100 (synced) because ~50 poppier-rock songs now
 "sounded like" an example. To just pin a song in, use *essential* (in for good, not used to
-judge other songs). Keep = "more like this".
+judge other songs). Keep = "more like this". `draft --fresh` (v1.5.7) rebuilds without the
+stay-in-easier rule, so a playlist can shrink back after a change like this.
 
 **Second playlist, "Yacht Rock" (2026-11-01):** smooth soft rock, a bit upbeat but not
 overdoing it, chill. Examples: Hall & Oates (in the library as "Daryl Hall & John Oates"),

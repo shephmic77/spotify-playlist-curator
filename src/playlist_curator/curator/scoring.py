@@ -598,12 +598,13 @@ def build_drafts(
     descriptors: dict[str, Descriptors] | None = None,
     coverage: bool | None = None,  # None = your saved setting (on unless you turned it off)
     auto_examples: bool = True,
-    style: str | None = None,  # None = your saved setting (inclusive unless you changed it)
+    style: str | None = None,  # None = your saved setting
+    fresh: bool = False,  # ignore the last draft (no "stays unless it falls clearly below")
 ) -> DraftResult:
     lib = load_library(db, descriptors)
     prev_run = latest_run(db)
     previous: dict[int, set[str]] = defaultdict(set)
-    if prev_run is not None:
+    if prev_run is not None and not fresh:
         for iid, rid in db.conn.execute(
             "SELECT identity_id, recording_id FROM draft_members "
             "WHERE run_id=? AND decision='include'",

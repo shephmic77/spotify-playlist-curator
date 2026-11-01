@@ -165,3 +165,21 @@ def test_decide_validation(db, lib):
         fb.decide(db, "Workout", GYM.format(1), "maybe")
     with pytest.raises(LookupError):
         fb.decide(db, "No such playlist", GYM.format(1), "keep")
+
+
+def test_fresh_draft_ignores_the_last_one(db, lib, monkeypatch):
+    w = idn.get_identity(db, "Workout")
+    lib_obj = sc.load_library(db, lib)
+    scored = [
+        s for s in sc.score_playlist(db, w, lib_obj).include if s.reasons[0] != "your example"
+    ]
+    lowest = min(scored, key=lambda s: s.score)
+    sc.build_drafts(db, descriptors=lib, style="balanced", coverage=False)
+    monkeypatch.setattr(sc, "THRESHOLD_MIN", lowest.score + 0.01)
+    monkeypatch.setattr(sc, "THRESHOLD_MAX", 1.0)
+    kept = sc.build_drafts(db, descriptors=lib, style="balanced", coverage=False)
+    fresh = sc.build_drafts(db, descriptors=lib, style="balanced", coverage=False, fresh=True)
+    d_kept = {d.identity.name: d for d in kept.drafts}["Workout"]
+    d_fresh = {d.identity.name: d for d in fresh.drafts}["Workout"]
+    assert lowest.recording_id in {s.recording_id for s in d_kept.include}
+    assert lowest.recording_id not in {s.recording_id for s in d_fresh.include}

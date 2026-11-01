@@ -253,6 +253,7 @@ curator tags songs [--playlist "Name"]   # every song with its descriptors
 curator tags set "tag" vibe|genre|era|ignore|default
 curator draft --coverage on|off   # every song in at least one playlist (default on)
 curator draft --style inclusive|balanced|strict   # how generous playlists are (saved)
+curator draft --fresh       # rebuild without the "already in, so easier to stay" rule
 curator describe "new words" --redefine "Name"   # replace a playlist's description
 curator identities edit "Name" --bar 0.93   # this playlist only: lower bar = a few more songs
 curator feedback "Name" reject --artist "Artist"   # every song by an artist (also keep, ...)
@@ -274,7 +275,7 @@ playlist* → a new playlist you own, then import again.
 ## Development
 
 ```bash
-pytest            # 248 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
+pytest            # 249 tests; Spotify, MusicBrainz, Last.fm, AcousticBrainz are mocked; no network
 ruff check . && ruff format --check .
 ```
 
