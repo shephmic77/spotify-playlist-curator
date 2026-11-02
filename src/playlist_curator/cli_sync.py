@@ -154,8 +154,10 @@ def _can_cover(settings: Settings, *, quiet: bool = False) -> bool:
     return ok
 
 
-def _cover_image(settings: Settings, name: str, ident: Any, image: str | None) -> tuple[bytes, Any]:
-    img = covers.from_file(image) if image else covers.generate(name, ident.concept or "")
+def _cover_image(
+    settings: Settings, name: str, ident: Any, image: str | None, focus: float = 0.5
+) -> tuple[bytes, Any]:
+    img = covers.from_file(image, focus) if image else covers.generate(name, ident.concept or "")
     jpeg = covers.to_jpeg(img)
     folder = settings.data_dir / "covers"
     folder.mkdir(parents=True, exist_ok=True)
@@ -196,7 +198,7 @@ def cmd_cover(settings: Settings, args: argparse.Namespace) -> int:
                 return 1
             entry = reg.get(ident.identity_id)
             try:
-                jpeg, path = _cover_image(settings, ident.name, ident, args.image)
+                jpeg, path = _cover_image(settings, ident.name, ident, args.image, args.focus)
             except (OSError, ValueError) as exc:
                 print(f"{ident.name}: couldn't use that image ({exc})", file=sys.stderr)
                 return 1
@@ -425,6 +427,13 @@ def register(sub: Any) -> None:
     q.add_argument("names", nargs="*", help="playlist name(s)")
     q.add_argument("--all", action="store_true", help="every playlist the app manages")
     q.add_argument("--image", metavar="FILE", help="use your own picture (cropped square)")
+    q.add_argument(
+        "--focus",
+        type=float,
+        default=0.5,
+        metavar="0-1",
+        help="with --image: which part to keep when cropping square (0 left/top, 1 right/bottom)",
+    )
     q.add_argument("--preview", action="store_true", help="only save the image file to look at")
     q.add_argument("--yes", action="store_true", help="don't ask for confirmation")
     q.set_defaults(func=cmd_cover)

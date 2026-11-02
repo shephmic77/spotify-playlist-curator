@@ -171,13 +171,24 @@ def generate(name: str, description: str = "", theme: Theme | None = None):
     return img
 
 
-def from_file(path: str | Path):
-    """Your own image, cropped to a centred square and resized to 640×640."""
+def from_file(path: str | Path, focus: float = 0.5):
+    """Your own image, cropped to a square (never stretched). ``focus`` picks which part of the
+    long side to keep: 0 = left/top, 0.5 = centre, 1 = right/bottom. Images larger than 640 px
+    are scaled down evenly; smaller ones are left at their own size, never blown up."""
     from PIL import Image, ImageOps
 
+    if not 0 <= focus <= 1:
+        raise ValueError("focus must be between 0 (left/top) and 1 (right/bottom)")
     with Image.open(path) as im:
         im = ImageOps.exif_transpose(im).convert("RGB")
-        return ImageOps.fit(im, (SIZE, SIZE), Image.Resampling.LANCZOS)
+        w, h = im.size
+        side = min(w, h)
+        x = round((w - side) * focus)
+        y = round((h - side) * focus)
+        im = im.crop((x, y, x + side, y + side))
+        if side > SIZE:
+            im = im.resize((SIZE, SIZE), Image.Resampling.LANCZOS)
+        return im
 
 
 def to_jpeg(img) -> bytes:

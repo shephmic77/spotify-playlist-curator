@@ -106,7 +106,20 @@ def test_own_image_is_cropped_square(env, fake, capsys, tmp_path):
     Image.new("RGB", (1600, 900), (10, 200, 30)).save(pic)
     img = covers.from_file(pic)
     assert img.size == (640, 640)
-    assert cli.main(["sync", "cover", "Night Drive", "--image", str(pic), "--preview"]) == 0
+    # never stretched: a small image keeps its own size; focus picks the part kept
+    Image.new("RGB", (300, 200), (0, 0, 0)).save(small := tmp_path / "small.png")
+    assert covers.from_file(small).size == (200, 200)
+    half = Image.new("RGB", (400, 200), (255, 0, 0))
+    half.paste((0, 0, 255), (200, 0, 400, 200))
+    half.save(split := tmp_path / "split.png")
+    assert covers.from_file(split, 0.0).getpixel((100, 100)) == (255, 0, 0)
+    assert covers.from_file(split, 1.0).getpixel((100, 100)) == (0, 0, 255)
+    assert (
+        cli.main(
+            ["sync", "cover", "Night Drive", "--image", str(pic), "--focus", "0.3", "--preview"]
+        )
+        == 0
+    )
     assert "your image" in capsys.readouterr().out
 
 

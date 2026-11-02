@@ -243,7 +243,7 @@ curator sync managed        # playlists the app created, with links
 curator sync history "Name" | curator rollback "Name" [--to ID]
 curator sync release "Name" # stop syncing a playlist; it stays in Spotify as is
 curator sync local-files    # local files to add to playlists by hand
-curator sync cover "Name" [--image FILE] [--preview] | --all   # cover image (needs a re-login once)
+curator sync cover "Name" [--image FILE [--focus 0-1]] [--preview] | --all   # cover (re-login once)
 curator identities edit "Name" --order alpha|none   # A-Z by artist, then song (default alpha)
 curator maintain            # import + tag new + redraft + compare (writes only if auto is on)
 curator maintain status     # settings, schedule, recent runs, what's waiting for you

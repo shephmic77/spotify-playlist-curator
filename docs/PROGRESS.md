@@ -81,6 +81,9 @@ Soundgarden, SOAD. Side effect to watch: most Smashing Pumpkins songs dropped (a
 Yacht Rock bar ×0.9 (56 songs) for him to prune in Spotify.
 
 **v1.6.0 (2026-11-01):** A-Z order (artist, then title) and playlist covers.
+**v1.6.1:** covers from his own pictures (a guitar with a cigarette for AltRock, a retro yacht
+sunset for Yacht Rock, kept in `data\covers\source\`) are cropped square and never stretched;
+`--focus 0-1` picks the part kept (Yacht Rock uses 0.45: yacht plus one palm).
 
 **Learned:** a word like "quiet" in a description triggers the built-in calm preset (soft,
 mellow; avoid heavy). Describe the core sound; let examples carry the softer side.

@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.6.0)
+# Handoff: Spotify Playlist Curator (v1.6.1)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then
@@ -31,7 +31,7 @@ already has, and keeps it organized:
 9. **Maintains** them automatically on a schedule, within drift limits.
 
 Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 257 tests
-pass, `ruff` clean. Version 1.6.0 (last tag `v1.0.0`).
+pass, `ruff` clean. Version 1.6.1 (last tag `v1.0.0`).
 
 ---
 
