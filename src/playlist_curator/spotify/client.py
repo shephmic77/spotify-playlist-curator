@@ -221,11 +221,12 @@ class SpotifyClient:
 
     def search_tracks(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
         """``GET /search?type=track``: only used by ``curator trial add`` to find the exact song
-        you asked to try (max 10 per request since Feb 2026). Returns raw track objects."""
+        you asked to try (max 10 per request since Feb 2026). Returns raw track objects.
+
+        No ``market`` parameter: with ``market=from_token`` Spotify answered 403 "Insufficient
+        client scope" on the owner's login (2026-11-01), as it needs the account's country."""
         page = self.request(
-            "GET",
-            "/search",
-            params={"q": query, "type": "track", "limit": min(limit, 10), "market": "from_token"},
+            "GET", "/search", params={"q": query, "type": "track", "limit": min(limit, 10)}
         )
         return [t for t in ((page.get("tracks") or {}).get("items") or []) if t]
 

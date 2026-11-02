@@ -33,7 +33,7 @@ def test_add_finds_the_exact_song_and_asks_spotify_one_search_per_song(fake, cli
     first = searches[0].url.params
     assert first["q"] == 'track:"El Paso" artist:"Marty Robbins"'
     assert first["type"] == "track" and int(first["limit"]) <= 10
-    assert first["market"] == "from_token"
+    assert "market" not in first  # market=from_token gave 403 "Insufficient client scope"
     assert not in_crate(db, EL_PASO)  # pending songs are not in your library
     assert fake.write_bodies == []  # adding a trial never writes to Spotify by itself
 
@@ -119,3 +119,18 @@ def test_subtitles_are_optional_but_other_songs_never_match():
     assert trials.best_match("Luckenbach, Texas - Waylon Jennings", [full]).name == full["name"]
     assert trials.best_match("Luckenbach - Waylon Jennings", [full]) is None
     assert trials.best_match("Luckenbach, Texas - Johnny Cash", [full]) is None
+
+
+def test_cli_output_survives_a_cp1252_log_file(tmp_path, monkeypatch):
+    import io
+    import sys
+
+    from playlist_curator import cli
+
+    raw = io.BytesIO()
+    fake_out = io.TextIOWrapper(raw, encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", fake_out)
+    cli._safe_output()
+    print("100 now → +0 / -51")
+    sys.stdout.flush()
+    assert "→".encode() in raw.getvalue()

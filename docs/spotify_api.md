@@ -52,7 +52,7 @@ the app's own registry. `curator auth login --read-only` keeps the old read-only
 | `PUT /playlists/{id}` | 6 | name, description, public |
 | `POST /playlists/{id}/items` | 6 | ≤ 100 URIs per request |
 | `PUT /playlists/{id}/items` | 6 | replace (≤ 100) or reorder; we replace first 100 then append (also used to put a playlist in A-Z order) |
-| `GET /search?type=track` | 7 | v1.7: trial songs only, one exact "title + artist" lookup per song the owner asked to try; `limit` ≤ 10 (Feb 2026), `market=from_token`; never used to discover music |
+| `GET /search?type=track` | 7 | v1.7: trial songs only, one exact "title + artist" lookup per song the owner asked to try; `limit` ≤ 10 (Feb 2026); **no `market`** (`market=from_token` returned 403 "Insufficient client scope", 2026-11-01); never used to discover music |
 | `PUT /playlists/{id}/images` | 6 | v1.6: cover image, body = base64 JPEG ≤ 256 KB, `Content-Type: image/jpeg`; scope `ugc-image-upload`; app-made playlists only (not listed in the Feb-2026 removals) |
 | `DELETE /playlists/{id}/items` | 6 | body key `items` (was `tracks`), ≤ 100, optional `snapshot_id` |
 

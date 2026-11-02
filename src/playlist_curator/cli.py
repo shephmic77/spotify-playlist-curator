@@ -618,7 +618,24 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _safe_output() -> None:
+    """Never crash on a character the console can't show (e.g. "→" when Windows output goes to
+    a log file in cp1252): write UTF-8 to files and pipes, replace it on a console."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            if stream.isatty():
+                reconfigure(errors="replace")
+            else:
+                reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
+    _safe_output()
     args = build_parser().parse_args(argv)
     settings = load_settings()
     configure_logging("DEBUG" if args.verbose else settings.log_level)
