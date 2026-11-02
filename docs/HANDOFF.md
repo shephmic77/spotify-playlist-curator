@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.7.0)
+# Handoff: Spotify Playlist Curator (v1.7.1)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then
@@ -30,8 +30,8 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 263 tests
-pass, `ruff` clean. Version 1.7.0 (last tag `v1.0.0`).
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 264 tests
+pass, `ruff` clean. Version 1.7.1 (last tag `v1.0.0`).
 
 ---
 
@@ -127,7 +127,7 @@ spotify-playlist-curator/
 │   ├── cli_maintain.py       maintain / status / settings / schedule
 │   ├── cli_trial.py          trial add / list / like / dislike
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    263 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    264 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -253,7 +253,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 263 tests, no network
+pytest                       # 264 tests, no network
 ruff check . && ruff format --check .
 ```
 

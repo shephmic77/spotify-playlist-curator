@@ -66,6 +66,15 @@ def _live_or_alt(title: str) -> bool:
     return bool(re.search(r"\b(live|demo|karaoke|instrumental|cover|remix)\b", title, re.I))
 
 
+def _title_forms(name: str) -> set[str]:
+    """The title, and the title without a subtitle: "Luckenbach, Texas (Back to the Basics of
+    Love)" also answers to "Luckenbach, Texas"."""
+    forms = {_base(name)}
+    for cut in re.split(r"\s+\(|\s+-\s+|\s+\[", name, maxsplit=1)[:1]:
+        forms.add(_base(cut))
+    return forms
+
+
 def best_match(query: str, results: list[dict[str, Any]]) -> Track | None:
     """The search result that is really the song you named: same title (ignoring "Remastered"
     and the like) and, if you gave an artist, that artist among its credits. Studio versions
@@ -79,7 +88,7 @@ def best_match(query: str, results: list[dict[str, Any]]) -> Track | None:
         t = parse_track(raw).track
         if t is None or t.is_local:
             continue
-        if _base(t.name) != want_title:
+        if want_title not in _title_forms(t.name):
             continue
         if want_artist and not any(
             want_artist == _artist(a.name) or want_artist in _artist(a.name) for a in t.artists

@@ -104,3 +104,18 @@ def test_split_query_and_matching_never_substitutes():
     assert trials.split_query("Jolene") == ("Jolene", None)
     near = [{"type": "track", "uri": "spotify:track:x", "name": "El Pasito", "artists": []}]
     assert trials.best_match("El Paso", near) is None
+
+
+def test_subtitles_are_optional_but_other_songs_never_match():
+    def t(name, artist="Waylon Jennings"):
+        return {
+            "type": "track",
+            "uri": f"spotify:track:{len(name)}",
+            "name": name,
+            "artists": [{"name": artist}],
+        }
+
+    full = t("Luckenbach, Texas (Back to the Basics of Love)")
+    assert trials.best_match("Luckenbach, Texas - Waylon Jennings", [full]).name == full["name"]
+    assert trials.best_match("Luckenbach - Waylon Jennings", [full]) is None
+    assert trials.best_match("Luckenbach, Texas - Johnny Cash", [full]) is None
