@@ -12,7 +12,14 @@ keep them that way. Quality and user control beat automation and coverage.
 ## Hard rules (do not violate, even if asked by a task description)
 
 1. **Never introduce songs outside the Master Music Crate** (Liked Songs ∪ readable playlists).
-   No search endpoints, no recommendations, no "similar artists" pulls.
+   No recommendation endpoints, no "similar artists" pulls. **One exception, the owner's
+   decision 2026-11-01: trial songs** (`curator/trials.py`, `curator trial add`). Only songs
+   named one by one (by him, or suggested by Claude from tastes he stated in his own words, never
+   from exported library data) are looked up, one `GET /search` per song, exact title + artist
+   match or nothing. They go into that one app-made playlist as *pending* and are **not** in the
+   crate. Liked (command or heart in Spotify) → crate source `trial` + essential there.
+   Disliked (command or removed in Spotify) → out of the playlist, kept as title + artist only,
+   never added again.
 2. **Never send Spotify content to an LLM or ML model**, and never train, fine-tune, or embed
    with it (Spotify Developer Policy / Terms IV.2.1). That includes using an AI coding agent
    to "classify" exported library data. Classification must be rule-based and transparent.

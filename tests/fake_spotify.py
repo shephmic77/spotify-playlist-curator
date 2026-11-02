@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -69,7 +70,7 @@ class FakeSpotify:
         if key == "__episode__":
             return copy.deepcopy(self.lib["episode"])
         if key.startswith("spotify:"):  # entries written through the API are stored as URIs
-            for t in self.lib["tracks"].values():
+            for t in [*self.lib["tracks"].values(), *self.lib.get("catalog", {}).values()]:
                 if t["uri"] == key:
                     return copy.deepcopy(t)
             tid = key.split(":")[-1]
@@ -123,6 +124,23 @@ class FakeSpotify:
             )
 
         m = request.method
+        if m == "GET" and path == "/search":
+            q = request.url.params
+            assert q.get("type") == "track" and 1 <= int(q.get("limit", "5")) <= 10
+            title = re.search(r'track:"([^"]+)"', q["q"])
+            artist = re.search(r'artist:"([^"]+)"', q["q"])
+            pool = [*self.lib.get("catalog", {}).values(), *self.lib["tracks"].values()]
+            items = [
+                copy.deepcopy(t)
+                for t in pool
+                if not t.get("is_local")
+                and (not title or title.group(1).lower() in t["name"].lower())
+                and (
+                    not artist
+                    or any(artist.group(1).lower() in a["name"].lower() for a in t["artists"])
+                )
+            ][: int(q.get("limit", "5"))]
+            return httpx.Response(200, json={"tracks": {"items": items, "total": len(items)}})
         if m == "GET" and path == "/me":
             return httpx.Response(200, json=self.lib["me"])
         if m == "GET" and path == "/me/tracks":

@@ -24,7 +24,10 @@ the app see the README; for the full technical handoff see [HANDOFF.md](HANDOFF.
 - **Playlists are kept A-Z by artist, then song** in Spotify (owner's request 2026-11-01;
   `--order none` per playlist to opt out). **Covers** are generated from the name and his
   description (or his own picture) with `curator sync cover`.
-- Safety rules unchanged (AGENTS.md): only playlists the app created are ever written; Liked
+- **Trial songs** (v1.7.0, owner's request): songs not in the library can be *tried* in one
+  playlist: `curator trial add "Outlaw" "El Paso - Marty Robbins"`. Heart = like (joins the
+  library, pinned there); remove it from the playlist = dislike (gone, never re-added).
+- Safety rules unchanged otherwise (AGENTS.md): only playlists the app created are ever written; Liked
   Songs and original playlists never touched; nothing from the library is sent to an AI.
 
 ## Iteration 3: selective, one by one (2026-10-28, v1.5.1-1.5.4)
@@ -84,6 +87,13 @@ Yacht Rock bar ×0.9 (56 songs) for him to prune in Spotify.
 **v1.6.1:** covers from his own pictures (a guitar with a cigarette for AltRock, a retro yacht
 sunset for Yacht Rock, kept in `data\covers\source\`) are cropped square and never stretched;
 `--focus 0-1` picks the part kept (Yacht Rock uses 0.45: yacht plus one palm).
+
+**Third playlist, "Outlaw" (2026-11-01):** old / outlaw country and western, no modern
+country. Examples Big Iron, Highwayman, Take Me Home Country Roads (keep), Lyin' Eyes. Library
+has ~9 country-tagged songs, so it needs a country-family tag (country, folk, outlaw country,
+country rock, americana, western, bluegrass) and the generic words (rock, chill, indie) were
+removed; first clean draft 5 songs + 7 in review. Owner removed Riptide, I Will Wait and Hotel
+California. He wants to grow it from songs he doesn't have yet → v1.7.0 trial songs.
 
 **Learned:** a word like "quiet" in a description triggers the built-in calm preset (soft,
 mellow; avoid heavy). Describe the core sound; let examples carry the softer side.

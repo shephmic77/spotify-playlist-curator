@@ -1,4 +1,4 @@
-# Handoff: Spotify Playlist Curator (v1.6.1)
+# Handoff: Spotify Playlist Curator (v1.7.0)
 
 Everything a new coding agent (Claude Code, Codex) or a human needs to pick this project up.
 Read this, then [AGENTS.md](../AGENTS.md) (hard rules and conventions), then
@@ -30,8 +30,8 @@ already has, and keeps it organized:
    playlists the app created, with snapshots, verification and rollback.
 9. **Maintains** them automatically on a schedule, within drift limits.
 
-Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 257 tests
-pass, `ruff` clean. Version 1.6.1 (last tag `v1.0.0`).
+Status: **all 7 phases done**, plus v1.1 (judge songs by their own sound, every song placed, start-over). The collection is being rebuilt from scratch (section 8). 263 tests
+pass, `ruff` clean. Version 1.7.0 (last tag `v1.0.0`).
 
 ---
 
@@ -56,7 +56,7 @@ working copy. Nothing for this project lives elsewhere on the PC.
 
 | File | What it is | Safe to delete? |
 |---|---|---|
-| `curator.sqlite3` | The whole app state: crate, tags cache, playlist definitions, feedback, drafts, Spotify registry, snapshots, run logs (schema v9) | **No.** Feedback, decisions and the registry of app-made playlists are irreplaceable. Back it up before experiments |
+| `curator.sqlite3` | The whole app state: crate, tags cache, playlist definitions, feedback, drafts, Spotify registry, snapshots, run logs (schema v10) | **No.** Feedback, decisions and the registry of app-made playlists are irreplaceable. Back it up before experiments |
 | `.tokens.json` | Spotify OAuth tokens (owner-only permissions) | Yes (then `curator auth login` again) |
 | `intents.json` | His descriptions of what each old playlist was for (also imported into the DB) | Keep as a record |
 | `run_maintenance.cmd` | Wrapper Task Scheduler runs (cd + python -m ... maintain --scheduled) | Re-created by `curator maintain schedule --install` |
@@ -116,16 +116,18 @@ spotify-playlist-curator/
 │   │   ├── describe.py       plain words -> tag recipe (offline lexicon, or Claude: text only)
 │   │   ├── scoring.py        per-playlist scoring, adaptive thresholds, drafts
 │   │   ├── feedback.py       decisions, undo, avoid-tag suggestions, stats, holdout check
+│   │   ├── trials.py         songs he tries before they join the crate
 │   │   └── maintenance.py    import -> tag new -> redraft -> plan -> drift guards -> apply
-│   ├── storage/database.py   SQLite schema (append-only MIGRATIONS, now v9), queries, purge
+│   ├── storage/database.py   SQLite schema (append-only MIGRATIONS, now v10), queries, purge
 │   ├── cli.py                `curator` entry point; registers the cli_* modules
 │   ├── cli_concepts.py       intents / propose / proposals / identities
 │   ├── cli_drafts.py         describe / draft / drafts
 │   ├── cli_feedback.py       review / feedback / decisions / stats
 │   ├── cli_sync.py           sync / rollback / local-files
 │   ├── cli_maintain.py       maintain / status / settings / schedule
+│   ├── cli_trial.py          trial add / list / like / dislike
 │   └── app.py                Streamlit UI (`curator ui`)
-└── tests/                    257 tests; Spotify, MusicBrainz, Last.fm all faked
+└── tests/                    263 tests; Spotify, MusicBrainz, Last.fm all faked
     ├── conftest.py, fake_spotify.py (stateful httpx.MockTransport fake incl. writes),
     │   fake_metadata.py, library_builder.py, fixtures/library.json
     └── test_*.py             one file per module area
@@ -178,6 +180,10 @@ curator maintain ──► all of the above, unattended, within limits
 - Covers (`covers.py`, `curator sync cover`): drawn from the playlist name and his description
   only (theme picked by word rules), or his own image; new playlists get one automatically when
   the login has `ugc-image-upload`.
+- Trial songs (`curator/trials.py`, `cli_trial.py`, table `trial_songs`, schema v10): pending
+  trials are added to that playlist's target only; liked = crate source `trial` + essential;
+  disliked = removed and never re-added (title + artist kept). Hearting a pending trial in
+  Spotify = like (`trials.reconcile` at sync); removing it there = dislike.
 - Manual Spotify edits since the app's last write win: his adds become `keep`, his removes
   `reject` and are never re-added.
 - Snapshot before and after every change; re-read to verify; `curator rollback "Name"`
@@ -196,7 +202,7 @@ running, ok, held, partial, failed, stopped) and summarized to `data/reports/`.
 
 ---
 
-## 5. Database (SQLite, schema v9)
+## 5. Database (SQLite, schema v10)
 
 User data (never rebuild or drop): `dedup_decisions`, `playlist_intents`, `identities`,
 `identity_examples`, `feedback`, `feedback_log`, `managed_playlists`, `playlist_snapshots`.
@@ -247,7 +253,7 @@ curator maintain schedule --install [--every weekly] [--at HH:MM]   |  --remove
 curator auth login [--read-only|--manual]   curator auth status   curator ui
 
 # development
-pytest                       # 257 tests, no network
+pytest                       # 263 tests, no network
 ruff check . && ruff format --check .
 ```
 
@@ -255,7 +261,8 @@ ruff check . && ruff format --check .
 
 ## 7. Hard rules (summary; full list in AGENTS.md)
 
-1. Never introduce songs outside the crate (no search, no recommendations).
+1. Never introduce songs outside the crate (no recommendations), except trial songs he asks
+   to try (pending in one playlist; in the crate only once he likes them).
 2. Never send Spotify content to an LLM or ML model (Spotify Developer Terms). `describe` may
    send only the text he typed. Matching stays rule-based.
 3. Never modify Liked Songs (no library-write scope is requested).

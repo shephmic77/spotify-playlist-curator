@@ -26,6 +26,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from playlist_curator.curator import feedback as fb
+from playlist_curator.curator import trials
 from playlist_curator.curator.identities import Identity, list_identities
 from playlist_curator.curator.scoring import latest_run
 from playlist_curator.models import parse_playlist_item
@@ -112,7 +113,8 @@ def _rec_of_uri(db: Database) -> dict[str, str]:
 def _label(db: Database, uri: str) -> str:
     row = db.conn.execute("SELECT name, artists_json FROM tracks WHERE uri=?", (uri,)).fetchone()
     if not row:
-        return uri
+        t = trials.names(db).get(uri)
+        return f"{t[0]} — {', '.join(t[1])}  (trial)" if t else uri
     artists = ", ".join(a["name"] for a in json.loads(row["artists_json"]))
     return f"{row['name']} — {artists}" if artists else row["name"]
 
@@ -131,13 +133,15 @@ def alpha_order(db: Database, uris: list[str]) -> list[str]:
     from playlist_curator.crate.deduplication import _fold, normalize_artist
 
     rows = {
-        r["uri"]: (r["name"], json.loads(r["artists_json"]))
+        r["uri"]: (r["name"], [a["name"] for a in json.loads(r["artists_json"])])
         for r in db.conn.execute("SELECT uri, name, artists_json FROM tracks")
     }
+    for u, v in trials.names(db).items():
+        rows.setdefault(u, v)
 
     def key(u: str) -> tuple[str, str]:
         name, artists = rows.get(u, (u, []))
-        first = artists[0]["name"] if artists else ""
+        first = artists[0] if artists else ""
         return (normalize_artist(first) or "~", _fold(name))
 
     return sorted(uris, key=key)
@@ -164,6 +168,10 @@ def _target(db: Database, ident: Identity, run: int) -> tuple[list[str], list[st
     catalog, local = [], []
     for (uri,) in rows:
         (local if uri.startswith("spotify:local:") else catalog).append(uri)
+    # songs you're trying out in this playlist (not in your crate until you like them)
+    # (liked ones are pinned in the draft from the next `curator draft`; keep them meanwhile)
+    tried = trials.rows(db, ident.identity_id)
+    catalog += [r["uri"] for r in tried if r["status"] != "disliked" and r["uri"] not in catalog]
     return catalog, local
 
 
@@ -312,6 +320,8 @@ def apply(
     run_id = int(cur.lastrowid or 0)
     applied, errors = [], []
     idents = {i.identity_id: i for i in list_identities(db)}
+    for label in trials.reconcile(db, idents):  # trial songs you hearted in Spotify
+        say(f"  liked (hearted in Spotify): {label}")
 
     for pp in sync_plan.playlists:
         if pp.action not in ("create", "update"):
@@ -351,8 +361,13 @@ def apply(
                 for u in pp.keep_manual_adds:
                     if not u.startswith("spotify:local:"):
                         fb.decide_uri(db, ident, u, "keep")
+                pending = {r["uri"]: r for r in trials.rows(db, pp.identity_id, "pending")}
                 for u in pp.respect_manual_removes:
-                    fb.decide_uri(db, ident, u, "reject")
+                    if u in pending:  # a trial song you removed = you didn't like it
+                        gone = trials.dislike(db, ident, pending[u])
+                        say(f"  disliked (removed in Spotify): {gone}")
+                    else:
+                        fb.decide_uri(db, ident, u, "reject")
                 if pp.remove:
                     client.remove_items(sid, pp.remove)
                 if pp.add:
@@ -519,6 +534,7 @@ RETIRED_KEY = "retired_playlist_ids"
 # User data wiped by a start-over (the backup keeps it). Duplicate decisions, the tag cache,
 # your tag classes, the imported library and the run logs are kept.
 WIPED_TABLES = (
+    "trial_songs",
     "feedback_log",
     "feedback",
     "identity_examples",

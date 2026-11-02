@@ -21,6 +21,7 @@ LIKED_SONGS_SOURCE_ID = "__liked__"
 class SourceKind(StrEnum):
     LIKED = "liked"
     PLAYLIST = "playlist"
+    TRIAL = "trial"  # a recommended song you tried in a playlist and liked
 
 
 class SkipReason(StrEnum):

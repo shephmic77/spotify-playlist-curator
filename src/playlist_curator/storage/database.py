@@ -336,6 +336,23 @@ MIGRATIONS: list[str] = [
         updated_at TEXT NOT NULL
     );
     """,
+    # v10: songs you asked to try in one playlist (owner's decision 2026-11-01). Pending ones
+    # sit in that Spotify playlist only; liked ones join the crate; disliked ones are kept as
+    # title + artist only, so they're never suggested or added again.
+    """
+    CREATE TABLE trial_songs (
+        identity_id  INTEGER NOT NULL REFERENCES identities(identity_id),
+        uri          TEXT NOT NULL,
+        query        TEXT NOT NULL,
+        title        TEXT NOT NULL,
+        artists_json TEXT NOT NULL,
+        track_json   TEXT,
+        status       TEXT NOT NULL CHECK (status IN ('pending', 'liked', 'disliked')),
+        added_at     TEXT NOT NULL,
+        decided_at   TEXT,
+        PRIMARY KEY (identity_id, uri)
+    );
+    """,
 ]
 
 

@@ -1,5 +1,5 @@
 {
-  "_comment": "Synthetic library shaped like post-Feb-2026 Spotify Web API responses. IDs are fake.",
+  "_comment": "Synthetic library shaped like post-Feb-2026 Spotify Web API responses. IDs are fake. 'catalog': songs NOT in the library that GET /search can find (trial songs).",
   "me": {
     "id": "test_user",
     "display_name": "Test User",
@@ -388,5 +388,123 @@
       },
       "entries": []
     }
-  ]
+  ],
+  "catalog": {
+    "el_paso_live": {
+      "type": "track",
+      "id": "cat_elpaso_live",
+      "uri": "spotify:track:cat_elpaso_live",
+      "name": "El Paso - Live",
+      "duration_ms": 260000,
+      "explicit": false,
+      "is_local": false,
+      "is_playable": true,
+      "disc_number": 1,
+      "track_number": 1,
+      "external_ids": {
+        "isrc": "USSM10000099"
+      },
+      "artists": [
+        {
+          "id": "art_marty",
+          "name": "Marty Robbins",
+          "type": "artist"
+        }
+      ],
+      "album": {
+        "id": "alb_cat_elpaso_live",
+        "name": "Album El Paso - Live",
+        "album_type": "album",
+        "release_date": "1980-01-01",
+        "release_date_precision": "day"
+      }
+    },
+    "el_paso": {
+      "type": "track",
+      "id": "cat_elpaso",
+      "uri": "spotify:track:cat_elpaso",
+      "name": "El Paso",
+      "duration_ms": 260000,
+      "explicit": false,
+      "is_local": false,
+      "is_playable": true,
+      "disc_number": 1,
+      "track_number": 1,
+      "external_ids": {
+        "isrc": "USSM15900001"
+      },
+      "artists": [
+        {
+          "id": "art_marty",
+          "name": "Marty Robbins",
+          "type": "artist"
+        }
+      ],
+      "album": {
+        "id": "alb_cat_elpaso",
+        "name": "Album El Paso",
+        "album_type": "album",
+        "release_date": "1959-09-01",
+        "release_date_precision": "day"
+      }
+    },
+    "ghost_riders": {
+      "type": "track",
+      "id": "cat_ghost",
+      "uri": "spotify:track:cat_ghost",
+      "name": "(Ghost) Riders in the Sky",
+      "duration_ms": 260000,
+      "explicit": false,
+      "is_local": false,
+      "is_playable": true,
+      "disc_number": 1,
+      "track_number": 1,
+      "external_ids": {
+        "isrc": "USSM17900002"
+      },
+      "artists": [
+        {
+          "id": "art_johnny",
+          "name": "Johnny Cash",
+          "type": "artist"
+        }
+      ],
+      "album": {
+        "id": "alb_cat_ghost",
+        "name": "Album (Ghost) Riders in the Sky",
+        "album_type": "album",
+        "release_date": "1979-05-01",
+        "release_date_precision": "day"
+      }
+    },
+    "midnight_city_cover": {
+      "type": "track",
+      "id": "cat_mc_cover",
+      "uri": "spotify:track:cat_mc_cover",
+      "name": "Midnight City",
+      "duration_ms": 260000,
+      "explicit": false,
+      "is_local": false,
+      "is_playable": true,
+      "disc_number": 1,
+      "track_number": 1,
+      "external_ids": {
+        "isrc": "FRZID1100001"
+      },
+      "artists": [
+        {
+          "id": "art_m83",
+          "name": "M83",
+          "type": "artist"
+        }
+      ],
+      "album": {
+        "id": "alb_cat_mc_cover",
+        "name": "Album Midnight City",
+        "album_type": "album",
+        "release_date": "2011-10-14",
+        "release_date_precision": "day"
+      }
+    }
+  }
 }
