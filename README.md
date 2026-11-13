@@ -297,3 +297,7 @@ No Spotify data is sent to any AI model by this application.
 
 Tag data comes from [MusicBrainz](https://musicbrainz.org) and [Last.fm](https://www.last.fm)
 and is used for personal, non-commercial purposes.
+
+## License
+
+Code is released under the [MIT License](LICENSE). Data from outside sources keeps its original terms.
