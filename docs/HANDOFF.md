@@ -366,8 +366,7 @@ playlists.
 8. 5 local files must be added by hand in the desktop app.
 9. `app.py` (~800 lines) could be split into one module per tab.
 10. The Last.fm key was once pasted into a chat; rotate it at last.fm/api/accounts if wanted.
-11. `pyproject.toml` license says "Proprietary - personal use"; there's no LICENSE file. Add
-    one (e.g. MIT) only if he decides to.
+11. ~~License~~: MIT (LICENSE file added 2026-11-13; `pyproject.toml` updated to match).
 
 ---
 

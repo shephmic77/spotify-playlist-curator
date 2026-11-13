@@ -8,7 +8,7 @@ version = "1.7.2"
 description = "Personal Spotify playlist curator: rebuilds and maintains playlists from your own music crate."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "Proprietary - personal use" }
+license = { text = "MIT" }
 dependencies = [
     "httpx>=0.27",
     "numpy>=1.26",
